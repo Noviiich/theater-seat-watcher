@@ -73,6 +73,16 @@ class DiscoveryBatchModel(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 
+class SubscriptionBaselineModel(Base):
+    """The complete catalogue snapshot from which a rule starts observing."""
+
+    __tablename__ = "subscription_baselines"
+
+    subscription_id: Mapped[str] = mapped_column(ForeignKey("subscriptions.id"), primary_key=True)
+    snapshot_id: Mapped[str] = mapped_column(ForeignKey("catalogue_snapshots.id"), nullable=False)
+    established_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
 class CandidateModel(Base):
     __tablename__ = "candidates"
     __table_args__ = (UniqueConstraint("buyer_id", "session_id"),)
