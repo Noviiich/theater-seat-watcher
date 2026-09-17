@@ -52,7 +52,7 @@ theater_tickets/
 │   ├── adapters/
 │   │   ├── quicktickets/
 │   │   │   ├── client.py           # HTTP GET, headers, timeouts, rate limiting
-│   │   │   ├── catalogue.py        # Парсинг афиши и JSON-LD
+│   │   │   ├── catalogue.py        # Парсинг афиши, JSON-LD и iframe context
 │   │   │   ├── inventory.py        # Схема + занятость + capabilities
 │   │   │   ├── dto.py              # Внешние форматы и validation
 │   │   │   ├── checkout.py         # Проверенная цепочка оформления
