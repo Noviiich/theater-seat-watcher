@@ -76,7 +76,14 @@ def build_subscription_router(session_factory: async_sessionmaker[AsyncSession])
             f"{value.ticket_count} билет(а), профиль {value.seat_profile_id}, режим dry_run."
         )
 
-    @router.message(Command("subscriptions", "settings", "status", "preview", "orders"))
+    @router.message(Command("preview"))
+    async def preview(message: Message) -> None:
+        await message.answer(
+            "Предпросмотр доступен только после установки проверенного профиля зала и "
+            "свежей схемы. Сейчас подбор не запускается."
+        )
+
+    @router.message(Command("subscriptions", "settings", "status", "orders"))
     async def list_subscriptions(message: Message) -> None:
         assert message.from_user is not None
         async with session_factory() as session:
