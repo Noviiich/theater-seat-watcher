@@ -94,7 +94,7 @@
 
 ## 04. Хранилище и миграции
 
-- [ ] Commit: `feat: persist subscriptions sessions and discovery batches`.
+- [x] Commit: `feat: persist subscriptions sessions and discovery batches`.
 - Зависимости: 03.
 - Добавить SQLite/SQLAlchemy, Alembic, unit of work, Buyer, Subscription,
   Session, CatalogueSnapshot, DiscoveryBatch, Candidate с UNIQUE-ключами.
@@ -102,6 +102,12 @@
   снимка и кандидатов либо записывается целиком, либо откатывается.
 - Проверка: миграция пустой БД, round trip, rollback и конкурентные вставки
   одинаковых ID; повторный baseline не создаёт дублей.
+- Выполнено 17.09.2026: добавлены async SQLite adapter, SQLAlchemy-модели,
+  unit of work и начальная Alembic-миграция для Buyer, Subscription, Session,
+  CatalogueSnapshot, DiscoveryBatch и Candidate. Уникальные ключи защищают
+  provider session, snapshot, batch и buyer/session Candidate. Интеграционный
+  тест поднимает пустую БД, проверяет round trip, rollback, повтор snapshot и
+  конкурирующую вставку одного Telegram-пользователя.
 
 ## 05. HTTP-клиент QuickTickets
 
