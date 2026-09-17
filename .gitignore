@@ -1,0 +1,32 @@
+# Python build and test artefacts
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+
+# Local virtual environments and settings
+.venv/
+.env
+.env.*
+!.env.example
+
+# Runtime state: may contain personal data, sessions or payment URLs
+data/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+storage_state.json
+cookies.json
+playwright/.auth/
+*.har
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
