@@ -161,7 +161,7 @@
 
 ## 08. Управление подписками в Telegram
 
-- [ ] Commit: `feat: manage subscriptions through Telegram`.
+- [x] Commit: `feat: manage subscriptions through Telegram`.
 - Зависимости: 04, 07.
 - Добавить aiogram, allowlist/private chat middleware, мастер фильтров,
   количества, лимитов, выбор профиля, команды списка/паузы/настроек/статуса,
@@ -170,6 +170,13 @@
   включением. Неполный профиль не может включить live.
 - Проверка: fake Telegram updates, повтор callback, чужой user ID, callback
   чужой подписки, восстановление сохранённого правила после перезапуска.
+- Выполнено 17.09.2026: добавлен aiogram-адаптер с защитой private-chat и
+  allowlist для сообщений и callback-запросов. Команды создают сохраняемую
+  dry-run подписку, показывают её, приостанавливают/возобновляют её только у
+  владельца и останавливают Candidate владельца. Режим live не доступен через
+  этот интерфейс, пока профиль зала не проверен в шаге 10. Интеграционные
+  тесты проверяют round trip и owner scope; unit-тесты — разбор allowlist и
+  fake message/callback update.
 
 ## 09. Схема, занятость и ограничения продажи
 

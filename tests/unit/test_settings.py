@@ -41,3 +41,14 @@ def test_settings_do_not_retain_secret_values() -> None:
     assert settings.allowed_user_ids_configured is True
     assert settings.database_url_configured is True
     assert "a-secret-token" not in repr(settings)
+
+
+def test_settings_parse_numeric_telegram_allowlist() -> None:
+    settings = Settings.from_environ({"ALLOWED_TELEGRAM_USER_IDS": "12, 34,12"})
+
+    assert settings.allowed_telegram_user_ids == frozenset({"12", "34"})
+
+
+def test_settings_reject_invalid_telegram_allowlist() -> None:
+    with pytest.raises(ValueError, match="ALLOWED_TELEGRAM_USER_IDS"):
+        Settings.from_environ({"ALLOWED_TELEGRAM_USER_IDS": "12,not-an-id"})

@@ -41,6 +41,16 @@ def _booking_mode(value: str | None) -> BookingMode:
         raise ValueError(message) from exc
 
 
+def _allowed_user_ids(value: str | None) -> frozenset[str]:
+    """Parse a comma-separated allowlist without exposing it in status output."""
+    if value is None or not value.strip():
+        return frozenset()
+    values = frozenset(item.strip() for item in value.split(",") if item.strip())
+    if not values or any(not item.isdecimal() for item in values):
+        raise ValueError("ALLOWED_TELEGRAM_USER_IDS must be comma-separated numeric IDs")
+    return values
+
+
 @dataclass(frozen=True, slots=True)
 class Settings:
     """Settings displayed by the shell without exposing secret values."""
@@ -53,11 +63,13 @@ class Settings:
     telegram_token_configured: bool
     allowed_user_ids_configured: bool
     database_url_configured: bool
+    allowed_telegram_user_ids: frozenset[str] = frozenset()
 
     @classmethod
     def from_environ(cls, env: Mapping[str, str] | None = None) -> Settings:
         """Create settings from an environment mapping without loading files."""
         source = environ if env is None else env
+        allowed_telegram_user_ids = _allowed_user_ids(source.get("ALLOWED_TELEGRAM_USER_IDS"))
         return cls(
             booking_mode=_booking_mode(source.get("BOOKING_MODE")),
             poll_interval_seconds=_positive_int(
@@ -81,6 +93,7 @@ class Settings:
                 default=180,
             ),
             telegram_token_configured=bool(source.get("TELEGRAM_BOT_TOKEN")),
-            allowed_user_ids_configured=bool(source.get("ALLOWED_TELEGRAM_USER_IDS")),
+            allowed_user_ids_configured=bool(allowed_telegram_user_ids),
             database_url_configured=bool(source.get("DATABASE_URL")),
+            allowed_telegram_user_ids=allowed_telegram_user_ids,
         )

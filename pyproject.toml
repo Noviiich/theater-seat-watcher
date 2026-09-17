@@ -11,6 +11,7 @@ requires-python = ">=3.12"
 license = { text = "Proprietary" }
 authors = [{ name = "theater_tickets maintainers" }]
 dependencies = [
+    "aiogram>=3.31,<4",
     "aiosqlite>=0.20,<1",
     "alembic>=1.14,<2",
     "httpx>=0.28,<1",
