@@ -68,12 +68,12 @@ class Settings:
             renewal_interval_seconds=_positive_int(
                 source.get("RENEWAL_INTERVAL_SECONDS"),
                 name="RENEWAL_INTERVAL_SECONDS",
-                default=180,
+                default=1200,
             ),
             expected_hold_ttl_seconds=_positive_int(
                 source.get("EXPECTED_HOLD_TTL_SECONDS"),
                 name="EXPECTED_HOLD_TTL_SECONDS",
-                default=180,
+                default=1200,
             ),
             availability_retry_seconds=_positive_int(
                 source.get("AVAILABILITY_RETRY_SECONDS"),

@@ -5,13 +5,13 @@ import pytest
 from theater_tickets.settings import BookingMode, Settings
 
 
-def test_settings_default_to_dry_run_and_three_minute_intervals() -> None:
+def test_settings_default_to_dry_run_and_twenty_minute_hold_intervals() -> None:
     settings = Settings.from_environ({})
 
     assert settings.booking_mode is BookingMode.DRY_RUN
     assert settings.poll_interval_seconds == 60
-    assert settings.renewal_interval_seconds == 180
-    assert settings.expected_hold_ttl_seconds == 180
+    assert settings.renewal_interval_seconds == 1200
+    assert settings.expected_hold_ttl_seconds == 1200
     assert settings.availability_retry_seconds == 180
 
 
