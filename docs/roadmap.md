@@ -111,7 +111,7 @@
 
 ## 05. HTTP-клиент QuickTickets
 
-- [ ] Commit: `feat: add QuickTickets read client and page context`.
+- [x] Commit: `feat: add QuickTickets read client and page context`.
 - Зависимости: 03.
 - Добавить httpx transport, timeouts, общий rate limiter, извлечение актуального
   публичного токена, cookie jar по контекстам и редактирование секретов в логах.
@@ -119,6 +119,12 @@
   429 учитывает Retry-After, 401/403 не вызывают бесконечный цикл обновления.
 - Проверка: заглушки для timeout, 429, 5xx, истёкшего токена, HTML вместо JSON;
   скрипт read-only диагностики не содержит операций оформления.
+- Выполнено 17.09.2026: добавлен async `httpx`-клиент с cookie-контекстом,
+  извлечением transient `set_token`, публичными параметрами `scope=qt` /
+  `panel=site`, общим rate limiter и ограниченными retry только для GET.
+  401/403 не повторяются, 429 учитывает `Retry-After`, HTML вместо JSON даёт
+  ошибку контракта. Contract tests используют MockTransport и не обращаются к
+  QuickTickets.
 
 ## 06. Парсер афиши и деталей сеанса
 

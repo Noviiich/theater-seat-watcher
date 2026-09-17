@@ -51,7 +51,7 @@ theater_tickets/
 │   │   └── reconciliation.py
 │   ├── adapters/
 │   │   ├── quicktickets/
-│   │   │   ├── client.py           # HTTP, headers, timeouts, rate limiting
+│   │   │   ├── client.py           # HTTP GET, headers, timeouts, rate limiting
 │   │   │   ├── catalogue.py        # Парсинг афиши и JSON-LD
 │   │   │   ├── inventory.py        # Схема + занятость + capabilities
 │   │   │   ├── dto.py              # Внешние форматы и validation
