@@ -35,6 +35,37 @@ class SeatAvailability(StrEnum):
     UNKNOWN = "unknown"
 
 
+@dataclass(frozen=True, slots=True)
+class SaleCapabilities:
+    """Per-session provider limits; collective sale is deliberately separate."""
+
+    sell_available: bool
+    sell_max: int
+    book_available: bool
+    book_max: int
+    collective_sell_available: bool
+    collective_sell_min: int | None
+    collective_sell_max: int | None
+
+    def __post_init__(self) -> None:
+        if self.sell_max < 0 or self.book_max < 0:
+            raise DomainValidationError("sale maximums must not be negative")
+        for name in ("collective_sell_min", "collective_sell_max"):
+            value = getattr(self, name)
+            if value is not None and value <= 0:
+                raise DomainValidationError(f"{name} must be positive when set")
+        if (
+            self.collective_sell_min is not None
+            and self.collective_sell_max is not None
+            and self.collective_sell_min > self.collective_sell_max
+        ):
+            raise DomainValidationError("collective sale minimum must not exceed maximum")
+
+    def allows_regular_sale(self, ticket_count: int) -> bool:
+        """Only ordinary sell limits can authorize the booking flow."""
+        return ticket_count > 0 and self.sell_available and ticket_count <= self.sell_max
+
+
 @dataclass(frozen=True, slots=True, order=True)
 class Money:
     """A non-negative money amount stored as integer minor units."""
@@ -119,10 +150,19 @@ class Seat:
     seat_label: str
     price: Money
     availability: SeatAvailability
+    x: int | None = None
+    y: int | None = None
+    width: int | None = None
+    height: int | None = None
+    rotation: int | None = None
 
     def __post_init__(self) -> None:
         for name in ("provider_id", "hall_id", "block", "row_label", "seat_label"):
             object.__setattr__(self, name, _non_empty_identifier(getattr(self, name), name=name))
+        for name in ("x", "y", "width", "height", "rotation"):
+            value = getattr(self, name)
+            if value is not None and not isinstance(value, int):
+                raise DomainValidationError(f"{name} must be an integer when set")
 
 
 @dataclass(frozen=True, slots=True)

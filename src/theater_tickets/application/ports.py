@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Protocol
 
-from theater_tickets.domain.models import Seat, Session, SessionKey
+from theater_tickets.domain.models import SaleCapabilities, Seat, Session, SessionKey
 
 
 class Clock(Protocol):
@@ -23,3 +23,6 @@ class TheatreProvider(Protocol):
 
     async def fetch_inventory(self, key: SessionKey) -> tuple[Seat, ...]:
         """Return an inventory whose availability is already resolved."""
+
+    async def fetch_sale_capabilities(self, key: SessionKey) -> SaleCapabilities:
+        """Return fresh ordinary sale limits for the concrete session."""
