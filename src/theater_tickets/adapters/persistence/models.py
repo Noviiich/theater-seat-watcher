@@ -99,3 +99,71 @@ class CandidateModel(Base):
     next_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     watch_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     stop_reason: Mapped[str | None] = mapped_column(String(255))
+
+
+class RenewalCycleModel(Base):
+    """One planned booking cycle; retries remain within the same cycle."""
+
+    __tablename__ = "renewal_cycles"
+    __table_args__ = (UniqueConstraint("candidate_id", "cycle_no"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    candidate_id: Mapped[str] = mapped_column(ForeignKey("candidates.id"), nullable=False)
+    cycle_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    state: Mapped[str] = mapped_column(String(64), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    allocation_released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class CheckoutIntentModel(Base):
+    """A durable record written before a future changing provider request."""
+
+    __tablename__ = "checkout_intents"
+    __table_args__ = (UniqueConstraint("renewal_cycle_id", "attempt_no"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    renewal_cycle_id: Mapped[str] = mapped_column(ForeignKey("renewal_cycles.id"), nullable=False)
+    attempt_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    state: Mapped[str] = mapped_column(String(64), nullable=False)
+    selected_seat_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    reserved_total_minor: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class BudgetAllocationModel(Base):
+    """The locally reserved upper bound for one checkout intent."""
+
+    __tablename__ = "budget_allocations"
+    __table_args__ = (UniqueConstraint("checkout_intent_id"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    buyer_id: Mapped[str] = mapped_column(ForeignKey("buyers.id"), nullable=False)
+    discovery_batch_id: Mapped[str] = mapped_column(
+        ForeignKey("discovery_batches.id"), nullable=False
+    )
+    candidate_id: Mapped[str] = mapped_column(ForeignKey("candidates.id"), nullable=False)
+    checkout_intent_id: Mapped[str] = mapped_column(
+        ForeignKey("checkout_intents.id"), nullable=False
+    )
+    reserved_total_minor: Mapped[int] = mapped_column(Integer, nullable=False)
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    released_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class OrderModel(Base):
+    """Provider order history, including locally expired cycles."""
+
+    __tablename__ = "orders"
+    __table_args__ = (UniqueConstraint("checkout_intent_id"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    checkout_intent_id: Mapped[str] = mapped_column(
+        ForeignKey("checkout_intents.id"), nullable=False
+    )
+    provider_order_id: Mapped[str | None] = mapped_column(String(255))
+    state: Mapped[str] = mapped_column(String(64), nullable=False)
+    total_minor: Mapped[int] = mapped_column(Integer, nullable=False)
+    held_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
