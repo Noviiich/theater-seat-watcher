@@ -71,16 +71,39 @@ def _availability(base_status: object, overlay_status: object | None) -> SeatAva
 
 
 def parse_inventory(
-    hall_payload: dict[str, Any], availability_payload: dict[str, Any]
+    hall_payload: dict[str, Any],
+    availability_payload: dict[str, Any],
+    *,
+    expected_hall_id: str | None = None,
 ) -> HallInventory:
-    """Overlay a complete availability map onto hall geometry without guessing gaps."""
+    """Overlay a complete availability map onto hall geometry without guessing gaps.
+
+    A current public ``hall/hall`` response may omit its hall ID. The caller
+    can then pass the ID already verified in concrete session details; it is
+    never inferred from seats or geometry.
+    """
     hall = _response(hall_payload, "hall/hall")
-    hall_id = hall.get("hall_id") or hall.get("id")
+    response_hall_id = hall.get("hall_id") or hall.get("id")
+    if (
+        response_hall_id is not None
+        and expected_hall_id is not None
+        and str(response_hall_id) != str(expected_hall_id)
+    ):
+        raise QuickTicketsContractError("hall/hall hall ID conflicts with session details")
+    hall_id = response_hall_id if response_hall_id is not None else expected_hall_id
     if hall_id is None:
-        raise QuickTicketsContractError("hall/hall response has no hall ID")
-    places = hall.get("places")
-    if not isinstance(places, list):
-        raise QuickTicketsContractError("hall/hall response places must be a list")
+        raise QuickTicketsContractError("hall ID is absent from response and session details")
+    raw_places = hall.get("places")
+    if isinstance(raw_places, list):
+        places = raw_places
+    elif isinstance(raw_places, dict):
+        places = []
+        for mapping_id, item in raw_places.items():
+            if not isinstance(item, dict) or str(item.get("id")) != str(mapping_id):
+                raise QuickTicketsContractError("hall/hall places mapping has an invalid ID")
+            places.append(item)
+    else:
+        raise QuickTicketsContractError("hall/hall response places must be a list or ID mapping")
     availability = _response(availability_payload, "anyticket/anyticket").get("places")
     if not isinstance(availability, dict):
         raise QuickTicketsContractError("anyticket/anyticket places must be a complete object")
@@ -168,13 +191,13 @@ class QuickTicketsInventoryReader:
         self._client = client
 
     async def fetch_inventory(
-        self, *, context: QuickTicketsContext, session_id: str
+        self, *, context: QuickTicketsContext, session_id: str, hall_id: str | None = None
     ) -> HallInventory:
         hall, availability = (
             await self._client.get_json("hall/hall", context=context, elem_id=session_id),
             await self._client.get_json("anyticket/anyticket", context=context, elem_id=session_id),
         )
-        return parse_inventory(hall, availability)
+        return parse_inventory(hall, availability, expected_hall_id=hall_id)
 
     async def fetch_sale_capabilities(
         self, *, context: QuickTicketsContext, session_id: str

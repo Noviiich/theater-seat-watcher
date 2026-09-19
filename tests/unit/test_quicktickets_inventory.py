@@ -61,6 +61,52 @@ def test_inventory_overlays_complete_availability_and_preserves_geometry() -> No
     assert (inventory.seats[0].x, inventory.seats[0].width) == (1, 3)
 
 
+def test_inventory_uses_verified_session_hall_id_when_live_response_omits_it() -> None:
+    hall = _hall()
+    response = hall["response"]
+    assert isinstance(response, dict)
+    response.pop("hall_id")
+
+    inventory = parse_inventory(
+        hall,
+        {"response": {"places": {"1": {"status": "free"}, "3": {"status": "free"}}}},
+        expected_hall_id="16",
+    )
+
+    assert inventory.hall_id == "16"
+    with pytest.raises(QuickTicketsContractError, match="conflicts"):
+        parse_inventory(_hall(), {"response": {"places": {}}}, expected_hall_id="other")
+
+
+def test_inventory_accepts_an_id_keyed_place_mapping_only_when_ids_match() -> None:
+    hall = _hall()
+    response = hall["response"]
+    assert isinstance(response, dict)
+    places = response["places"]
+    assert isinstance(places, list)
+    response["places"] = {str(item["id"]): item for item in places if isinstance(item, dict)}
+
+    inventory = parse_inventory(
+        hall,
+        {"response": {"places": {"1": {"status": "free"}, "3": {"status": "free"}}}},
+    )
+
+    assert len(inventory.seats) == 3
+    response["places"] = {"wrong": places[0]}
+    with pytest.raises(QuickTicketsContractError, match="invalid ID"):
+        parse_inventory(hall, {"response": {"places": {}}})
+
+
+def test_inventory_rejects_missing_hall_id_without_verified_session_details() -> None:
+    hall = _hall()
+    response = hall["response"]
+    assert isinstance(response, dict)
+    response.pop("hall_id")
+
+    with pytest.raises(QuickTicketsContractError, match="absent"):
+        parse_inventory(hall, {"response": {"places": {}}})
+
+
 @pytest.mark.parametrize(
     "availability",
     [
