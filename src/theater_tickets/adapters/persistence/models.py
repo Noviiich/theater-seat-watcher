@@ -127,6 +127,11 @@ class CheckoutIntentModel(Base):
     state: Mapped[str] = mapped_column(String(64), nullable=False)
     selected_seat_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     reserved_total_minor: Mapped[int] = mapped_column(Integer, nullable=False)
+    remote_stage: Mapped[str] = mapped_column(String(64), nullable=False, default="planned")
+    write_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    write_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error_code: Mapped[str | None] = mapped_column(String(64))
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
 

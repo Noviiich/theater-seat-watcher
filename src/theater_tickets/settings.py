@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from os import environ
+from pathlib import Path
 
 
 class BookingMode(StrEnum):
@@ -63,6 +64,7 @@ class Settings:
     telegram_token_configured: bool
     allowed_user_ids_configured: bool
     database_url_configured: bool
+    buyer_profile_path: Path | None = field(default=None, repr=False)
     allowed_telegram_user_ids: frozenset[str] = frozenset()
 
     @classmethod
@@ -70,8 +72,12 @@ class Settings:
         """Create settings from an environment mapping without loading files."""
         source = environ if env is None else env
         allowed_telegram_user_ids = _allowed_user_ids(source.get("ALLOWED_TELEGRAM_USER_IDS"))
+        buyer_profile_path = _buyer_profile_path(source.get("BUYER_PROFILE_PATH"))
+        booking_mode = _booking_mode(source.get("BOOKING_MODE"))
+        if booking_mode is BookingMode.LIVE and buyer_profile_path is None:
+            raise ValueError("BOOKING_MODE=live requires BUYER_PROFILE_PATH")
         return cls(
-            booking_mode=_booking_mode(source.get("BOOKING_MODE")),
+            booking_mode=booking_mode,
             poll_interval_seconds=_positive_int(
                 source.get("POLL_INTERVAL_SECONDS"),
                 name="POLL_INTERVAL_SECONDS",
@@ -96,4 +102,11 @@ class Settings:
             allowed_user_ids_configured=bool(allowed_telegram_user_ids),
             database_url_configured=bool(source.get("DATABASE_URL")),
             allowed_telegram_user_ids=allowed_telegram_user_ids,
+            buyer_profile_path=buyer_profile_path,
         )
+
+
+def _buyer_profile_path(value: str | None) -> Path | None:
+    if value is None or not value.strip():
+        return None
+    return Path(value).expanduser()

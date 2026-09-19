@@ -65,7 +65,14 @@
   Установлено также обязательное поле `selectAnyplacesCount` для
   `/ordering/anytickets`: без него сервер возвращает на страницу сеанса при
   сохранённом hold. С ним форма confirm доступна, но `confirm` возвращает
-  пустой HTTP 200 без ссылки. Предоставленный HAR подтвердил страницу
+  пустой HTTP 200 без ссылки. Повторы 19.09.2026 подтвердили нулевое тело ответа
+  при заполненных обязательных полях и consent; отдельные поля имени и отчества
+  в форме отсутствуют. Следующая проверка должна нажать фактическую
+  submit-кнопку вместо `requestSubmit()` без submitter и проверить её
+  `name`/`value`/`formaction`. В форме обнаружены две submit-кнопки без
+  `name`/`value`; confirm намеренно не отправлялся до проверки их видимости,
+  подписей и возможного влияния click-обработчика на скрытые поля терминала.
+  Предоставленный HAR подтвердил страницу
   `/payment/order/<opaque-order-token>`, polling `/payment/check_payment` и
   срок оплаты 1200 секунд. После последнего confirm QuickTickets начал обрывать
   TLS даже для read-only запросов; headless Chrome получил тот же TLS
@@ -260,7 +267,7 @@
 
 ## 13. Адаптер оформления на подтверждённом контракте
 
-- [ ] Commit: `feat: implement checkout and validated payment handoff`.
+- [x] Commit: `feat: implement checkout and validated payment handoff`.
 - Зависимости: успешный 02, 05, 09, 12.
 - Реализовать исследованный HTTP/browser workflow с записью этапов intent,
   buyer context, верификацией N мест, суммы, ID, TTL и URL. Добавить fake adapter
@@ -271,6 +278,19 @@
   неверное количество/цена, частичный результат, редиректы, истёкшая авторизация,
   CAPTCHA, недопустимый URL, отсутствие переносимой ссылки.
 - Автоматический worker live ещё не включать до завершения 14–17.
+- Выполнено 19.09.2026: добавлены provider-neutral `CheckoutRequest`, buyer
+  context без утечки через `repr`, типизированные состояния и ошибки,
+  `QuickTicketsCheckoutAdapter`, fake write transport и persistent recorder
+  стадий intent с миграцией `0004`. `dry_run` не вызывает transport. После
+  начала write timeout и любой неполный подтверждённый ответ становятся
+  `ambiguous` без автоматического повтора. Успех требует точного состава мест и
+  суммы, provider order ID, aware `held_at`/`expires_at` и подтверждённой
+  переносимой HTTPS-ссылки строго вида
+  `quicktickets.ru/payment/order/<opaque-token>`; ссылка сеанса отклоняется.
+  Unit/интеграционные тесты покрывают success, sold/seat conflict,
+  auth/CAPTCHA, частичный состав, неверную сумму, timeout, невалидные URL,
+  отсутствие ссылки/TTL и durable stages. Автоматический вызов live transport
+  намеренно не подключён к worker до шагов 14–17.
 
 ## 14. Восстановление неоднозначных операций
 

@@ -46,6 +46,7 @@ theater_tickets/
 │   │   ├── subscriptions.py
 │   │   ├── discovery.py
 │   │   ├── planning.py             # Каждый подходящий сеанс в пределах лимитов
+│   │   ├── checkout.py             # Типизированные request/result/stages и порты
 │   │   ├── booking.py
 │   │   ├── renewals.py             # Сроки циклов, stop/paid, повтор после 1200 секунд
 │   │   └── reconciliation.py
@@ -63,6 +64,7 @@ theater_tickets/
 │   │   │   ├── keyboards.py
 │   │   │   └── notifier.py
 │   │   └── persistence/
+│   │       ├── checkout.py         # Короткие транзакции стадий intent
 │   │       ├── database.py
 │   │       ├── models.py           # ORM отдельно от domain.models
 │   │       ├── repositories.py

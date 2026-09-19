@@ -25,6 +25,7 @@ storage_state.json
 cookies.json
 playwright/.auth/
 *.har
+buyer-profile*.json
 
 # Editors and operating systems
 .idea/

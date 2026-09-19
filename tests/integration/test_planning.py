@@ -9,6 +9,7 @@ from alembic.config import Config
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from theater_tickets.adapters.persistence.checkout import SqlAlchemyCheckoutStageRecorder
 from theater_tickets.adapters.persistence.database import create_session_factory
 from theater_tickets.adapters.persistence.models import (
     BudgetAllocationModel,
@@ -21,6 +22,7 @@ from theater_tickets.adapters.persistence.models import (
     SubscriptionModel,
 )
 from theater_tickets.adapters.persistence.unit_of_work import SqlAlchemyUnitOfWork
+from theater_tickets.application.checkout import CheckoutErrorCode, CheckoutStage
 from theater_tickets.application.planning import BookingPlanner, PlanningState
 from theater_tickets.domain.models import Money, Subscription
 
@@ -217,6 +219,57 @@ def test_concurrent_planning_cannot_exceed_active_total(tmp_path: Path) -> None:
                 )
             )
             assert active_total == 4_000
+        await engine.dispose()
+
+    asyncio.run(scenario())
+
+
+def test_checkout_stages_are_committed_in_short_transactions(tmp_path: Path) -> None:
+    database = tmp_path / "checkout-stages.sqlite"
+    config = Config("alembic.ini")
+    config.set_main_option("sqlalchemy.url", f"sqlite:///{database}")
+    command.upgrade(config, "head")
+
+    async def scenario() -> None:
+        engine, factory = create_session_factory(f"sqlite+aiosqlite:///{database}")
+        now = datetime(2026, 9, 19, 16, 30, tzinfo=UTC)
+        await _seed(factory, now, candidate_count=1)
+        subscription = Subscription(
+            subscription_id="subscription",
+            buyer_id="buyer",
+            theatre_alias="theatre",
+            ticket_count=2,
+            seat_profile_id="hall",
+            max_sessions_per_batch=1,
+        )
+        async with SqlAlchemyUnitOfWork(factory) as uow:
+            assert uow.session is not None
+            planned = await BookingPlanner().plan(
+                uow.session,
+                candidate_id="candidate-1",
+                subscription=subscription,
+                reserved_total=Money(4_000),
+                selected_seat_ids=("seat-1", "seat-2"),
+                now=now,
+            )
+        assert planned.checkout_intent_id is not None
+
+        recorder = SqlAlchemyCheckoutStageRecorder(factory, now=lambda: now)
+        await recorder.record(planned.checkout_intent_id, CheckoutStage.WRITE_STARTED)
+        await recorder.record(
+            planned.checkout_intent_id,
+            CheckoutStage.AMBIGUOUS,
+            CheckoutErrorCode.TRANSPORT_TIMEOUT,
+        )
+
+        async with factory() as session:
+            intent = await session.get(CheckoutIntentModel, planned.checkout_intent_id)
+            assert intent is not None
+            assert intent.state == "unknown"
+            assert intent.remote_stage == "ambiguous"
+            assert intent.write_started_at == now.replace(tzinfo=None)
+            assert intent.write_completed_at == now.replace(tzinfo=None)
+            assert intent.last_error_code == "transport_timeout"
         await engine.dispose()
 
     asyncio.run(scenario())

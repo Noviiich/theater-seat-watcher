@@ -52,3 +52,15 @@ def test_settings_parse_numeric_telegram_allowlist() -> None:
 def test_settings_reject_invalid_telegram_allowlist() -> None:
     with pytest.raises(ValueError, match="ALLOWED_TELEGRAM_USER_IDS"):
         Settings.from_environ({"ALLOWED_TELEGRAM_USER_IDS": "12,not-an-id"})
+
+
+def test_live_mode_requires_private_buyer_profile_path() -> None:
+    with pytest.raises(ValueError, match="BUYER_PROFILE_PATH"):
+        Settings.from_environ({"BOOKING_MODE": "live"})
+
+    settings = Settings.from_environ(
+        {"BOOKING_MODE": "live", "BUYER_PROFILE_PATH": "/private/buyer.json"}
+    )
+
+    assert settings.buyer_profile_path is not None
+    assert "buyer.json" not in repr(settings)
