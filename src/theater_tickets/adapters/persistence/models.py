@@ -4,7 +4,17 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -174,7 +184,38 @@ class OrderModel(Base):
     )
     provider_order_id: Mapped[str | None] = mapped_column(String(255))
     state: Mapped[str] = mapped_column(String(64), nullable=False)
+    actual_seat_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
     total_minor: Mapped[int] = mapped_column(Integer, nullable=False)
+    currency: Mapped[str] = mapped_column(String(3), nullable=False, default="RUB")
+    payment_url: Mapped[str | None] = mapped_column(Text)
     held_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class OutboxMessageModel(Base):
+    """A durable notification reference; secret URLs remain on the related order."""
+
+    __tablename__ = "outbox_messages"
+    __table_args__ = (
+        UniqueConstraint("dedup_key"),
+        Index("ix_outbox_due", "state", "next_attempt_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    dedup_key: Mapped[str] = mapped_column(String(255), nullable=False)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    order_id: Mapped[str | None] = mapped_column(ForeignKey("orders.id"))
+    discovery_batch_id: Mapped[str | None] = mapped_column(ForeignKey("discovery_batches.id"))
+    buyer_id: Mapped[str] = mapped_column(ForeignKey("buyers.id"), nullable=False)
+    destination_chat_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    payload: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False, default=dict)
+    state: Mapped[str] = mapped_column(String(32), nullable=False, default="pending")
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    next_attempt_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    claimed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    telegram_message_id: Mapped[str | None] = mapped_column(String(64))
+    last_error_code: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

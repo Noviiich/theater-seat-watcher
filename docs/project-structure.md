@@ -49,6 +49,7 @@ theater_tickets/
 │   │   ├── checkout.py             # Типизированные request/result/stages и порты
 │   │   ├── booking.py
 │   │   ├── renewals.py             # Сроки циклов, ожидания и повтор после 1200 секунд
+│   │   ├── outbox.py                # Сообщения оплаты, batch summary и порты доставки
 │   │   └── reconciliation.py       # Startup recovery без повтора неизвестного POST
 │   ├── adapters/
 │   │   ├── quicktickets/
@@ -66,6 +67,7 @@ theater_tickets/
 │   │   │   └── notifier.py
 │   │   └── persistence/
 │   │       ├── checkout.py         # Короткие транзакции стадий intent
+│   │       ├── outbox.py            # Order + outbox атомарно, claim/retry/supersede
 │   │       ├── reconciliation.py   # Recovery states и request snapshot
 │   │       ├── renewals.py         # Атомарный claim, next_run_at и release allocation
 │   │       ├── database.py
