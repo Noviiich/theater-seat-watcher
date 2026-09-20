@@ -48,7 +48,7 @@ theater_tickets/
 │   │   ├── planning.py             # Каждый подходящий сеанс в пределах лимитов
 │   │   ├── checkout.py             # Типизированные request/result/stages и порты
 │   │   ├── booking.py
-│   │   ├── renewals.py             # Сроки циклов, stop/paid, повтор после 1200 секунд
+│   │   ├── renewals.py             # Сроки циклов, ожидания и повтор после 1200 секунд
 │   │   └── reconciliation.py       # Startup recovery без повтора неизвестного POST
 │   ├── adapters/
 │   │   ├── quicktickets/
@@ -67,6 +67,7 @@ theater_tickets/
 │   │   └── persistence/
 │   │       ├── checkout.py         # Короткие транзакции стадий intent
 │   │       ├── reconciliation.py   # Recovery states и request snapshot
+│   │       ├── renewals.py         # Атомарный claim, next_run_at и release allocation
 │   │       ├── database.py
 │   │       ├── models.py           # ORM отдельно от domain.models
 │   │       ├── repositories.py

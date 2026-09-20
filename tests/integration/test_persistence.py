@@ -16,7 +16,14 @@ from theater_tickets.adapters.persistence.repositories import (
     SubscriptionRepository,
 )
 from theater_tickets.adapters.persistence.unit_of_work import SqlAlchemyUnitOfWork
-from theater_tickets.domain.models import BookingMode, Money, Session, SessionKey, Subscription
+from theater_tickets.domain.models import (
+    BookingMode,
+    Money,
+    RenewalPolicy,
+    Session,
+    SessionKey,
+    Subscription,
+)
 
 
 def test_migration_and_transaction_boundaries(tmp_path: Path) -> None:
@@ -127,6 +134,12 @@ def test_subscription_repository_scopes_changes_to_telegram_owner(tmp_path: Path
             max_sessions_per_batch=1,
             max_order_total=Money(12345),
             booking_mode=BookingMode.DRY_RUN,
+            renewal_policy=RenewalPolicy(
+                renewal_interval_seconds=1300,
+                expected_hold_ttl_seconds=1250,
+                availability_retry_seconds=190,
+                max_cycles_per_session=4,
+            ),
         )
         async with SqlAlchemyUnitOfWork(factory) as uow:
             assert uow.session is not None

@@ -321,7 +321,7 @@
 
 ## 15. Планировщик повторного бронирования
 
-- [ ] Commit: `feat: renew unpaid bookings in twenty-minute cycles`.
+- [x] Commit: `feat: renew unpaid bookings in twenty-minute cycles`.
 - Зависимости: 12–14.
 - Добавить application/renewals, worker с сохранённым next_run_at, вычисление
   срока от `held_at + 1200` и новый cycle_no без status-check оплаты. Каждый
@@ -335,6 +335,13 @@
   одновременных запуска scheduler и перезапуск после записи intent.
 - Коммит не включает Telegram-доставку: результат проверяется через заказы
   fake provider и сохранённое состояние; доставка следующего шага независима.
+- Выполнено 20.09.2026: добавлены persisted `next_run_at`, границы циклов
+  `due_at/started_at/ended_at`, атомарный claim для нескольких scheduler и
+  локальное освобождение allocation без проверки оплаты. Новый срок считается
+  от фактического `held_at`; пропущенные интервалы схлопываются в одну задачу,
+  отсутствие мест/бюджета даёт повтор через 180 секунд. Пауза, stop,
+  `watch_until` и лимит циклов запрещают новые intent; startup recovery не
+  дублирует уже записанный intent. Telegram/outbox остаются шагом 16.
 
 ## 16. Outbox и сообщения оплаты
 

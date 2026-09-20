@@ -79,7 +79,9 @@ class BookingPlanner:
                 .where(
                     CandidateModel.id == candidate_id,
                     CandidateModel.subscription_id == subscription.subscription_id,
-                    CandidateModel.tracking_state.in_(("queued", "waiting_budget")),
+                    CandidateModel.tracking_state.in_(
+                        ("queued", "waiting_budget", "renewal_claimed")
+                    ),
                 )
                 .values(tracking_state="planning", next_run_at=None)
             ),
@@ -129,6 +131,7 @@ class BookingPlanner:
             candidate_id=candidate.id,
             cycle_no=cycle_no,
             state="submitting",
+            started_at=now,
             created_at=now,
         )
         database.add(cycle)

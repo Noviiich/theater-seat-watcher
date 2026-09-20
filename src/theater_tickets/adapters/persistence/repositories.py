@@ -176,6 +176,10 @@ def _subscription_config(value: Subscription) -> dict[str, object]:
         "max_active_total": value.max_active_total.minor_units if value.max_active_total else None,
         "priority": value.priority,
         "booking_mode": value.booking_mode.value,
+        "renewal_interval_seconds": value.renewal_policy.renewal_interval_seconds,
+        "expected_hold_ttl_seconds": value.renewal_policy.expected_hold_ttl_seconds,
+        "availability_retry_seconds": value.renewal_policy.availability_retry_seconds,
+        "max_cycles_per_session": value.renewal_policy.max_cycles_per_session,
         "event_ids": sorted(value.event_ids),
         "title_filter": value.title_filter,
     }
@@ -214,5 +218,12 @@ def _subscription_from_model(model: SubscriptionModel, telegram_user_id: str) ->
         if isinstance(event_ids, list)
         else frozenset(),
         title_filter=title_filter if isinstance(title_filter, str) else None,
-        renewal_policy=RenewalPolicy(),
+        renewal_policy=RenewalPolicy(
+            renewal_interval_seconds=integer("renewal_interval_seconds", 1200),
+            expected_hold_ttl_seconds=integer("expected_hold_ttl_seconds", 1200),
+            availability_retry_seconds=integer("availability_retry_seconds", 180),
+            max_cycles_per_session=(
+                value if isinstance((value := config.get("max_cycles_per_session")), int) else None
+            ),
+        ),
     )
