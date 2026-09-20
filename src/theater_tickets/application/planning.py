@@ -8,7 +8,7 @@ from enum import StrEnum
 from typing import Any, cast
 from uuid import uuid4
 
-from sqlalchemy import func, select, update
+from sqlalchemy import exists, func, select, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -17,6 +17,7 @@ from theater_tickets.adapters.persistence.models import (
     CandidateModel,
     CheckoutIntentModel,
     RenewalCycleModel,
+    SubscriptionModel,
 )
 from theater_tickets.domain.models import Money, Subscription
 
@@ -59,6 +60,7 @@ class BookingPlanner:
         expected_total: Money | None = None,
         selected_seat_ids: tuple[str, ...],
         now: datetime,
+        subscription_version: int | None = None,
     ) -> PlanningOutcome:
         if reserved_total.minor_units <= 0:
             raise ValueError("reserved_total must be positive")
@@ -82,8 +84,27 @@ class BookingPlanner:
                     CandidateModel.tracking_state.in_(
                         ("queued", "waiting_budget", "renewal_claimed")
                     ),
+                    exists(
+                        select(SubscriptionModel.id).where(
+                            SubscriptionModel.id == subscription.subscription_id,
+                            SubscriptionModel.enabled.is_(True),
+                            *(
+                                (SubscriptionModel.version == subscription_version,)
+                                if subscription_version is not None
+                                else ()
+                            ),
+                        )
+                    ),
                 )
-                .values(tracking_state="planning", next_run_at=None)
+                .values(
+                    tracking_state="planning",
+                    next_run_at=None,
+                    **(
+                        {"subscription_version": subscription_version}
+                        if subscription_version is not None
+                        else {}
+                    ),
+                )
             ),
         )
         if claimed.rowcount != 1:

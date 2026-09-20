@@ -457,6 +457,7 @@ async def _setup(
                 subscription_id="subscription",
                 session_id="session",
                 discovery_batch_id="batch",
+                booking_mode="live",
                 tracking_state="queued",
                 current_cycle_no=0,
                 watch_until=now + timedelta(days=1),

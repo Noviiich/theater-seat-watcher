@@ -19,6 +19,7 @@ class RenewalProcessState(StrEnum):
     WAITING_AVAILABILITY = "waiting_availability"
     WAITING_BUDGET = "waiting_budget"
     TRANSIENT_ERROR = "transient_error"
+    PAUSED = "paused"
     ALREADY_ACTIVE = "already_active"
     NEEDS_ATTENTION = "needs_attention"
     STOPPED = "stopped"
@@ -77,7 +78,7 @@ class RenewalRepository(Protocol):
     ) -> None:
         """Persist a short availability/budget retry without consuming a cycle."""
 
-    async def mark_needs_attention(self, *, task: RenewalTask) -> None:
+    async def mark_needs_attention(self, *, task: RenewalTask, reason: str) -> None:
         """Block automatic writes while preserving local allocations."""
 
     async def stop(self, *, task: RenewalTask, reason: str) -> None:

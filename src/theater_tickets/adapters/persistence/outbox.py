@@ -11,6 +11,7 @@ from sqlalchemy.engine import CursorResult
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from theater_tickets.adapters.persistence.models import (
+    BudgetAllocationModel,
     BuyerModel,
     CandidateModel,
     CheckoutIntentModel,
@@ -87,6 +88,15 @@ class SqlAlchemyOrderOutboxWriter:
                 if message is None:
                     raise LookupError("confirmed order has no outbox message")
                 return RecordedOrder(existing.id, message.id)
+
+            allocation = await database.scalar(
+                select(BudgetAllocationModel).where(
+                    BudgetAllocationModel.checkout_intent_id == intent.id
+                )
+            )
+            if allocation is None or not allocation.active:
+                raise LookupError("confirmed order has no active budget allocation")
+            allocation.reserved_total_minor = order.total.minor_units
 
             order_id = str(uuid4())
             outbox_id = str(uuid4())

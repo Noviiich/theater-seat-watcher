@@ -1,7 +1,7 @@
 # Структура проекта
 
 Сейчас уже существуют базовый Python-пакет, настройки, чистые модели домена,
-SQLite adapter, Alembic-миграции и сценарий durable discovery.
+SQLite adapter, Alembic-миграции и one-shot сценарий discovery → checkout → outbox.
 Ниже — **целевая** структура, которая создаётся постепенно по roadmap; пустые
 модули заранее не нужны.
 
@@ -47,7 +47,7 @@ theater_tickets/
 │   │   ├── discovery.py
 │   │   ├── planning.py             # Каждый подходящий сеанс в пределах лимитов
 │   │   ├── checkout.py             # Типизированные request/result/stages и порты
-│   │   ├── booking.py
+│   │   ├── booking.py              # Повторная проверка и provider-neutral решение
 │   │   ├── renewals.py             # Сроки циклов, ожидания и повтор после 1200 секунд
 │   │   ├── outbox.py                # Сообщения оплаты, batch summary и порты доставки
 │   │   └── reconciliation.py       # Startup recovery без повтора неизвестного POST
@@ -66,6 +66,7 @@ theater_tickets/
 │   │   │   ├── keyboards.py
 │   │   │   └── notifier.py
 │   │   └── persistence/
+│   │       ├── booking.py          # Context, dry-run, failure/recovery transitions
 │   │       ├── checkout.py         # Короткие транзакции стадий intent
 │   │       ├── outbox.py            # Order + outbox атомарно, claim/retry/supersede
 │   │       ├── reconciliation.py   # Recovery states и request snapshot
@@ -76,7 +77,7 @@ theater_tickets/
 │   │       └── unit_of_work.py
 │   └── workers/
 │       ├── polling.py
-│       ├── booking.py
+│       ├── booking.py              # Live/dry-run/resume и one-shot workflow
 │       ├── renewals.py             # Сохранённые next_run_at, без повторов пропущенных тиков
 │       ├── reconciliation.py
 │       └── outbox.py
@@ -108,7 +109,8 @@ theater_tickets/
 fake provider и fake Telegram, проверяя транзакции, outbox и восстановление.
 Live-проверки не входят в обычный `pytest` и не запускаются в CI.
 
-Модели persistence включают Candidate → RenewalCycle → CheckoutIntent → Order.
+Модели persistence включают Candidate → RenewalCycle → CheckoutIntent → Order,
+а dry-run сохраняет отдельный DryRunReport без intent/allocation/POST.
 История циклов хранится отдельно от текущего состояния отслеживания сеанса.
 Планировщик renewals пробуждает задачи по времени начала удержания и подтверждённому
 исходу заказа; outbox создаёт новое сообщение на каждый успешный цикл. Fake clock

@@ -104,6 +104,8 @@ class CandidateModel(Base):
     discovery_batch_id: Mapped[str] = mapped_column(
         ForeignKey("discovery_batches.id"), nullable=False
     )
+    subscription_version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    booking_mode: Mapped[str] = mapped_column(String(16), nullable=False, default="dry_run")
     tracking_state: Mapped[str] = mapped_column(String(64), nullable=False, default="queued")
     current_cycle_no: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     next_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -219,3 +221,20 @@ class OutboxMessageModel(Base):
     last_error_code: Mapped[str | None] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class DryRunReportModel(Base):
+    """One durable seat-selection decision that can never become a live intent."""
+
+    __tablename__ = "dry_run_reports"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    candidate_id: Mapped[str] = mapped_column(
+        ForeignKey("candidates.id"), unique=True, nullable=False
+    )
+    state: Mapped[str] = mapped_column(String(64), nullable=False)
+    selected_seat_ids: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    total_minor: Mapped[int | None] = mapped_column(Integer)
+    currency: Mapped[str | None] = mapped_column(String(3))
+    explanation: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

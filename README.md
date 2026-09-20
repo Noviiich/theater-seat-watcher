@@ -6,9 +6,9 @@ Telegram-бот отслеживает новые сеансы Орловско�
 
 Реализованы read-only QuickTickets-клиент, обнаружение сеансов, подбор мест,
 durable planning, строгий checkout-handoff и сохраняемый планировщик повторных
-циклов, а также persistent outbox с Telegram-кнопками оплаты. Полный автоматический
-live-сценарий пока не подключён; режим по умолчанию — `dry_run`, в котором write
-transport не вызывается.
+циклов, persistent outbox с Telegram-кнопками оплаты и one-shot orchestration
+всего сценария. Фоновый polling runtime пока не подключён; режим по умолчанию —
+`dry_run`, в котором write transport не вызывается.
 
 ## Требования
 
@@ -29,7 +29,7 @@ uv run pytest
 Для будущих настроек скопируйте `.env.example` в `.env` и задайте значения вне
 Git. Пока `.env` не загружается автоматически, а статус CLI не показывает секреты.
 
-Не включайте автоматический `BOOKING_MODE=live` до завершения worker-шага 17
+Не включайте автоматический `BOOKING_MODE=live` до завершения runtime-шага 18
 из [roadmap](docs/roadmap.md). Checkout и startup recovery уже отклоняют
 неполный или неподтверждённый handoff, но оплату всегда совершает пользователь
 на стороне продавца.

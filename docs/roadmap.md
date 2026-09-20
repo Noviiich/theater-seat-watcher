@@ -368,7 +368,7 @@
 
 ## 17. Полный прикладной сценарий
 
-- [ ] Commit: `feat: orchestrate discovery selection booking and notification`.
+- [x] Commit: `feat: orchestrate discovery selection booking and notification`.
 - Зависимости: 07–16.
 - Соединить candidate worker, повторную проверку доступности, подбор, checkout,
   renewals, reconcile и outbox. На buyer context — один checkout одновременно. Добавить
@@ -380,8 +380,20 @@
 - Проверка: интеграционные SQLite + fake provider + fake Telegram, отсутствие
   соседней группы, продажа позже публикации, конфликт лучшей группы, разные
   результаты в пакете, отключение правила в очереди, рестарт в каждой границе.
-  Несколько циклов на каждый сеанс при общем бюджете; оплата одного прекращает
-  только его повторы; отсутствие мест не создаёт пустую ссылку или новый цикл.
+  Несколько циклов на каждый сеанс при общем бюджете; явная остановка после
+  оплаты прекращает только его повторы; отсутствие мест не создаёт пустую ссылку
+  или новый цикл.
+- Выполнено 20.09.2026: `BookingWorkflow` соединяет durable discovery, свежую
+  проверку сеанса/capabilities/inventory, строгий выбор соседней группы,
+  локальное планирование, checkout, reconciliation/resume, renewals и outbox.
+  Checkout-контекст сериализован по buyer; подтверждённый заказ корректирует
+  allocation до фактической суммы. Миграция `0008` фиксирует mode/version
+  Candidate и отдельный DryRunReport: симуляция использует тот же evaluator,
+  но не создаёт intent/allocation/POST и не становится live задним числом.
+  Fake provider/Telegram проверяют несколько сеансов, разные batch-результаты,
+  позднюю продажу, отсутствие группы, seat conflict, общий бюджет, stop одного
+  сеанса, повторные циклы и восстановление сохранённого intent. Фоновый lifecycle,
+  backoff и runtime lock остаются шагом 18.
 
 ## 18. Runtime и наблюдаемость
 

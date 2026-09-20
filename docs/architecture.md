@@ -104,6 +104,7 @@ cancel_checkout(order) -> CancellationResult
 | `BudgetAllocation` | intent, buyer, batch, зарезервированный верхний предел; изменение в одной транзакции с intent |
 | `Order` | intent, cycle_id, provider_order_id при наличии, фактические места/сумма, защищённый URL, held_at, expires_at, remote/payment state |
 | `OutboxMessage` | UNIQUE dedup_key с cycle_no/order_id и типом сообщения, destination, payload reference, attempts, next_attempt_at, sent_at, telegram_message_id |
+| `DryRunReport` | candidate UNIQUE, решение подбора, места/сумма или явная причина; без intent/allocation/POST |
 
 Места в заказе сохраняются отдельным неизменяемым снимком. Цена, название или
 профиль, изменённые позже, не переписывают историю. Сырые API DTO в домен не
@@ -139,6 +140,12 @@ ETag/Last-Modified использовать, только если сервер 
 В одной короткой транзакции сохраняются снимок, upsert сеансов, новые события,
 пакет и кандидаты. После первого baseline перезапуск читает сохранённые данные.
 На новых сеансах детали загружаются отдельно; это не откладывает фиксацию их ID.
+
+Candidate фиксирует mode и version подписки на момент обнаружения. В `dry_run`
+тот же evaluator перечитывает сеанс, продажу и места и сохраняет DryRunReport,
+но не создаёт RenewalCycle, CheckoutIntent, allocation или внешний POST.
+Переход подписки в `live` не превращает старый dry-run Candidate в покупку:
+live-обработка начинается только для впервые обнаруженных после переключения сеансов.
 
 Задачи пакета упорядочены по требованиям. На одном checkout-контексте покупателя
 оформление идёт последовательно, чтобы разные сеансы не смешались в корзине.

@@ -467,6 +467,7 @@ async def _setup_database(
                     subscription_id="subscription",
                     session_id=f"session-{index}",
                     discovery_batch_id="batch",
+                    booking_mode="live",
                     tracking_state="queued",
                     current_cycle_no=0,
                     watch_until=now + timedelta(hours=12),

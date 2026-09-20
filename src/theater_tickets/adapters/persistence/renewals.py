@@ -74,6 +74,7 @@ class SqlAlchemyRenewalRepository:
                 )
                 .where(
                     SubscriptionModel.enabled.is_(True),
+                    CandidateModel.booking_mode == "live",
                     CandidateModel.tracking_state.in_(_RUNNABLE_STATES),
                     or_(
                         CandidateModel.next_run_at.is_(None),
@@ -203,16 +204,17 @@ class SqlAlchemyRenewalRepository:
                 reason.value if reason is RenewalWaitReason.TRANSIENT_ERROR else None
             )
 
-    async def mark_needs_attention(self, *, task: RenewalTask) -> None:
+    async def mark_needs_attention(self, *, task: RenewalTask, reason: str) -> None:
         async with self._session_factory() as database, database.begin():
             candidate = await database.get(CandidateModel, task.candidate_id)
             if candidate is None:
                 return
+            claimed_without_new_cycle = candidate.tracking_state == "renewal_claimed"
             candidate.tracking_state = "needs_attention"
             candidate.next_run_at = None
-            candidate.stop_reason = "ambiguous_checkout"
+            candidate.stop_reason = reason
             cycle = await self._current_cycle(database, candidate)
-            if cycle is not None:
+            if cycle is not None and not claimed_without_new_cycle:
                 cycle.state = "needs_attention"
 
     async def stop(self, *, task: RenewalTask, reason: str) -> None:

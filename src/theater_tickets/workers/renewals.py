@@ -69,7 +69,10 @@ class RenewalWorker:
                     now=now,
                 )
             elif result.state is RenewalProcessState.NEEDS_ATTENTION:
-                await self._repository.mark_needs_attention(task=task)
+                await self._repository.mark_needs_attention(
+                    task=task,
+                    reason=result.stop_reason or "checkout_needs_attention",
+                )
             elif result.state is RenewalProcessState.STOPPED:
                 await self._repository.stop(
                     task=task,

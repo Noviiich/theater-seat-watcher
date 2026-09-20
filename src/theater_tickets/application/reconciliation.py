@@ -12,6 +12,7 @@ from theater_tickets.application.checkout import (
     CheckoutRequest,
     CheckoutResult,
     CheckoutState,
+    ConfirmedOrder,
     ProviderCheckoutObservation,
 )
 
@@ -84,6 +85,14 @@ class RecoveryRequestLoader(Protocol):
         """Rebuild the exact request and private buyer context for reconciliation."""
 
 
+class ConfirmedRecoveryHandler(Protocol):
+    async def recover_unscheduled(self) -> int:
+        """Schedule confirmed orders persisted before a prior process stopped."""
+
+    async def finalize(self, intent_id: str, order: ConfirmedOrder) -> None:
+        """Atomically record the recovered order, outbox and next renewal deadline."""
+
+
 class CheckoutRecoveryService:
     """Recover incomplete intents without ever resubmitting checkout."""
 
@@ -94,17 +103,31 @@ class CheckoutRecoveryService:
         request_loader: RecoveryRequestLoader,
         transport: CheckoutReconciliationTransport,
         validator: CheckoutObservationValidator,
+        confirmed_handler: ConfirmedRecoveryHandler | None = None,
     ) -> None:
         self._repository = repository
         self._request_loader = request_loader
         self._transport = transport
         self._validator = validator
+        self._confirmed_handler = confirmed_handler
 
     async def recover_startup(self) -> tuple[RecoveryOutcome, ...]:
+        if self._confirmed_handler is not None:
+            await self._confirmed_handler.recover_unscheduled()
         outcomes: list[RecoveryOutcome] = []
         for incomplete in await self._repository.list_incomplete():
             outcome = await self._recover_one(incomplete)
             await self._repository.apply(outcome)
+            if (
+                self._confirmed_handler is not None
+                and outcome.disposition is RecoveryDisposition.CONFIRMED
+                and outcome.checkout_result is not None
+                and outcome.checkout_result.order is not None
+            ):
+                await self._confirmed_handler.finalize(
+                    outcome.intent_id,
+                    outcome.checkout_result.order,
+                )
             outcomes.append(outcome)
         return tuple(outcomes)
 

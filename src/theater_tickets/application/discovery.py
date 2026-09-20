@@ -15,6 +15,7 @@ from theater_tickets.adapters.persistence.models import (
     DiscoveryBatchModel,
     SessionModel,
     SubscriptionBaselineModel,
+    SubscriptionModel,
 )
 from theater_tickets.adapters.persistence.repositories import CatalogueRepository
 from theater_tickets.domain.models import Session, Subscription
@@ -124,6 +125,10 @@ class DiscoveryService:
         if batch is None or not subscription.enabled:
             return DiscoveryOutcome(baseline_established=False)
 
+        persisted_subscription = await database.get(SubscriptionModel, subscription.subscription_id)
+        if persisted_subscription is None:
+            raise LookupError("subscription must be persisted before discovery")
+
         sessions_by_persisted_id = {
             persisted.id: item
             for item, persisted in (
@@ -145,7 +150,7 @@ class DiscoveryService:
             persisted = persisted_sessions[item.key.session_id]
             existing = await database.scalar(
                 select(CandidateModel).where(
-                    CandidateModel.buyer_id == subscription.buyer_id,
+                    CandidateModel.buyer_id == persisted_subscription.buyer_id,
                     CandidateModel.session_id == persisted.id,
                 )
             )
@@ -155,12 +160,17 @@ class DiscoveryService:
             database.add(
                 CandidateModel(
                     id=candidate_id,
-                    buyer_id=subscription.buyer_id,
+                    buyer_id=persisted_subscription.buyer_id,
                     subscription_id=subscription.subscription_id,
                     session_id=persisted.id,
                     discovery_batch_id=batch.id,
-                    tracking_state="queued",
+                    subscription_version=persisted_subscription.version,
+                    booking_mode=subscription.booking_mode.value,
+                    tracking_state=(
+                        "queued" if subscription.booking_mode.value == "live" else "dry_run_queued"
+                    ),
                     current_cycle_no=0,
+                    watch_until=item.starts_at,
                 )
             )
             candidate_ids.append(candidate_id)
