@@ -56,6 +56,7 @@ class BookingPlanner:
         candidate_id: str,
         subscription: Subscription,
         reserved_total: Money,
+        expected_total: Money | None = None,
         selected_seat_ids: tuple[str, ...],
         now: datetime,
     ) -> PlanningOutcome:
@@ -67,6 +68,9 @@ class BookingPlanner:
             raise ValueError("selected_seat_ids must contain the requested unique seat count")
         if now.tzinfo is None or now.utcoffset() is None:
             raise ValueError("now must be timezone-aware")
+        quoted_total = expected_total or reserved_total
+        if quoted_total.currency != reserved_total.currency or quoted_total > reserved_total:
+            raise ValueError("expected_total must use one currency and fit reserved_total")
 
         claimed = cast(
             CursorResult[Any],
@@ -136,6 +140,9 @@ class BookingPlanner:
             state="pending",
             selected_seat_ids=list(selected_seat_ids),
             reserved_total_minor=reserved_total.minor_units,
+            expected_total_minor=quoted_total.minor_units,
+            currency=quoted_total.currency,
+            expected_hold_ttl_seconds=subscription.renewal_policy.expected_hold_ttl_seconds,
             created_at=now,
         )
         database.add(intent)

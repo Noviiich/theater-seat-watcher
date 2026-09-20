@@ -165,7 +165,7 @@ class QuickTicketsCheckoutAdapter:
                 error_code=error_code,
             )
 
-        result = self._validate_confirmed(request, observation)
+        result = self.validate_observation(request, observation)
         stage = (
             CheckoutStage.VALIDATED
             if result.state is CheckoutState.CONFIRMED
@@ -174,9 +174,15 @@ class QuickTicketsCheckoutAdapter:
         await self._recorder.record(request.intent_id, stage, result.error_code)
         return result
 
-    def _validate_confirmed(
+    def validate_observation(
         self, request: CheckoutRequest, observation: ProviderCheckoutObservation
     ) -> CheckoutResult:
+        """Validate a confirmed observation without performing provider I/O."""
+        if observation.state is not CheckoutState.CONFIRMED:
+            return CheckoutResult(
+                CheckoutState.AMBIGUOUS,
+                error_code=observation.error_code or CheckoutErrorCode.PARTIAL_RESULT,
+            )
         if tuple(observation.seat_ids) != request.seat_ids:
             code = (
                 CheckoutErrorCode.PARTIAL_RESULT

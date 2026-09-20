@@ -28,8 +28,8 @@ uv run pytest
 Для будущих настроек скопируйте `.env.example` в `.env` и задайте значения вне
 Git. Пока `.env` не загружается автоматически, а статус CLI не показывает секреты.
 
-Не включайте автоматический `BOOKING_MODE=live` до завершения recovery и worker
-шагов 14–17 из [roadmap](docs/roadmap.md). Checkout-адаптер уже отклоняет
+Не включайте автоматический `BOOKING_MODE=live` до завершения worker-шагов 15–17
+из [roadmap](docs/roadmap.md). Checkout и startup recovery уже отклоняют
 неполный или неподтверждённый handoff, но оплату всегда совершает пользователь
 на стороне продавца.
 

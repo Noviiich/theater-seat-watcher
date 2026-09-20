@@ -49,7 +49,7 @@ theater_tickets/
 │   │   ├── checkout.py             # Типизированные request/result/stages и порты
 │   │   ├── booking.py
 │   │   ├── renewals.py             # Сроки циклов, stop/paid, повтор после 1200 секунд
-│   │   └── reconciliation.py
+│   │   └── reconciliation.py       # Startup recovery без повтора неизвестного POST
 │   ├── adapters/
 │   │   ├── quicktickets/
 │   │   │   ├── client.py           # HTTP GET, headers, timeouts, rate limiting
@@ -57,6 +57,7 @@ theater_tickets/
 │   │   │   ├── inventory.py        # Схема + занятость + capabilities
 │   │   │   ├── dto.py              # Внешние форматы и validation
 │   │   │   ├── checkout.py         # Проверенная цепочка оформления
+│   │   │   ├── reconciliation.py   # found/not-found/unknown/unsupported
 │   │   │   └── browser.py          # Опционально по результату исследования
 │   │   ├── telegram/
 │   │   │   ├── routers/
@@ -65,6 +66,7 @@ theater_tickets/
 │   │   │   └── notifier.py
 │   │   └── persistence/
 │   │       ├── checkout.py         # Короткие транзакции стадий intent
+│   │       ├── reconciliation.py   # Recovery states и request snapshot
 │   │       ├── database.py
 │   │       ├── models.py           # ORM отдельно от domain.models
 │   │       ├── repositories.py

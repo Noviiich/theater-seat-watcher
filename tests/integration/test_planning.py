@@ -21,9 +21,21 @@ from theater_tickets.adapters.persistence.models import (
     SessionModel,
     SubscriptionModel,
 )
+from theater_tickets.adapters.persistence.reconciliation import (
+    SqlAlchemyRecoveryRepository,
+    SqlAlchemyRecoveryRequestLoader,
+)
 from theater_tickets.adapters.persistence.unit_of_work import SqlAlchemyUnitOfWork
-from theater_tickets.application.checkout import CheckoutErrorCode, CheckoutStage
+from theater_tickets.application.checkout import (
+    CheckoutBuyer,
+    CheckoutErrorCode,
+    CheckoutStage,
+)
 from theater_tickets.application.planning import BookingPlanner, PlanningState
+from theater_tickets.application.reconciliation import (
+    RecoveryDisposition,
+    RecoveryOutcome,
+)
 from theater_tickets.domain.models import Money, Subscription
 
 
@@ -270,6 +282,116 @@ def test_checkout_stages_are_committed_in_short_transactions(tmp_path: Path) -> 
             assert intent.write_started_at == now.replace(tzinfo=None)
             assert intent.write_completed_at == now.replace(tzinfo=None)
             assert intent.last_error_code == "transport_timeout"
+        await engine.dispose()
+
+    asyncio.run(scenario())
+
+
+def test_recovery_state_transitions_keep_allocations_active(tmp_path: Path) -> None:
+    database = tmp_path / "recovery.sqlite"
+    config = Config("alembic.ini")
+    config.set_main_option("sqlalchemy.url", f"sqlite:///{database}")
+    command.upgrade(config, "head")
+
+    async def scenario() -> None:
+        engine, factory = create_session_factory(f"sqlite+aiosqlite:///{database}")
+        now = datetime(2026, 9, 19, 16, 30, tzinfo=UTC)
+        await _seed(factory, now, candidate_count=4)
+        async with SqlAlchemyUnitOfWork(factory) as uow:
+            assert uow.session is not None
+            buyer = await uow.session.get(BuyerModel, "buyer")
+            assert buyer is not None
+            buyer.profile_ref = "private-profile-ref"
+        subscription = Subscription(
+            subscription_id="subscription",
+            buyer_id="buyer",
+            theatre_alias="theatre",
+            ticket_count=2,
+            seat_profile_id="hall",
+            max_sessions_per_batch=4,
+            max_active_orders=4,
+        )
+        intent_ids: list[str] = []
+        async with SqlAlchemyUnitOfWork(factory) as uow:
+            assert uow.session is not None
+            for index in range(1, 5):
+                planned = await BookingPlanner().plan(
+                    uow.session,
+                    candidate_id=f"candidate-{index}",
+                    subscription=subscription,
+                    reserved_total=Money(1_000),
+                    expected_total=Money(900),
+                    selected_seat_ids=(f"seat-{index}-1", f"seat-{index}-2"),
+                    now=now,
+                )
+                assert planned.checkout_intent_id is not None
+                intent_ids.append(planned.checkout_intent_id)
+
+        recorder = SqlAlchemyCheckoutStageRecorder(factory, now=lambda: now)
+        for intent_id in intent_ids[1:]:
+            await recorder.record(intent_id, CheckoutStage.WRITE_STARTED)
+        repository = SqlAlchemyRecoveryRepository(factory, now=lambda: now)
+        incomplete = await repository.list_incomplete()
+        by_intent = {item.intent_id: item.write_started for item in incomplete}
+        assert set(by_intent) == set(intent_ids)
+        assert by_intent[intent_ids[0]] is False
+        assert all(by_intent[intent_id] for intent_id in intent_ids[1:])
+
+        loaded_refs: list[str] = []
+
+        def load_buyer(reference: str) -> CheckoutBuyer:
+            loaded_refs.append(reference)
+            return CheckoutBuyer(
+                lastname="Tester",
+                firstname="Test",
+                middlename="Example",
+                email="buyer@example.test",
+                phone="+79990000000",
+                personal_data_consent=True,
+            )
+
+        recovered_request = await SqlAlchemyRecoveryRequestLoader(
+            factory, buyer_loader=load_buyer
+        ).load(intent_ids[0])
+        assert loaded_refs == ["private-profile-ref"]
+        assert recovered_request.expected_total == Money(900)
+        assert recovered_request.reserved_total == Money(1_000)
+        assert recovered_request.seat_ids == ("seat-1-1", "seat-1-2")
+
+        await repository.apply(RecoveryOutcome(intent_ids[0], RecoveryDisposition.RETRY_ALLOWED))
+        await repository.apply(RecoveryOutcome(intent_ids[1], RecoveryDisposition.RETRY_ALLOWED))
+        await repository.apply(RecoveryOutcome(intent_ids[2], RecoveryDisposition.CONFIRMED))
+        await repository.apply(
+            RecoveryOutcome(
+                intent_ids[3],
+                RecoveryDisposition.NEEDS_ATTENTION,
+                error_code=CheckoutErrorCode.PARTIAL_RESULT,
+            )
+        )
+
+        async with factory() as session:
+            intents = [await session.get(CheckoutIntentModel, value) for value in intent_ids]
+            assert all(intent is not None for intent in intents)
+            assert [intent.state for intent in intents if intent is not None] == [
+                "pending",
+                "retry_allowed",
+                "validated",
+                "unknown",
+            ]
+            assert (
+                await session.scalar(
+                    select(func.count(BudgetAllocationModel.id)).where(
+                        BudgetAllocationModel.active.is_(True)
+                    )
+                )
+                == 4
+            )
+            assert (
+                await session.scalar(
+                    select(CandidateModel.tracking_state).where(CandidateModel.id == "candidate-4")
+                )
+                == "needs_attention"
+            )
         await engine.dispose()
 
     asyncio.run(scenario())

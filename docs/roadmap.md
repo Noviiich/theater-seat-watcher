@@ -294,7 +294,7 @@
 
 ## 14. Восстановление неоднозначных операций
 
-- [ ] Commit: `feat: reconcile interrupted checkout operations`.
+- [x] Commit: `feat: reconcile interrupted checkout operations`.
 - Зависимости: 12, 13.
 - Добавить startup recovery изменяющего checkout, ветку unsupported/needs_attention
   и явное разрешение неоднозначного результата POST. Статус оплаты и отмена
@@ -305,6 +305,19 @@
 - Проверка: падение до запроса/после отправки/после ответа до DB commit;
   found/not-found/unknown при reconcile изменяющего POST. У fake provider
   счётчик созданных заказов внутри одного цикла остаётся равным одному.
+- Выполнено 20.09.2026: добавлены startup `CheckoutRecoveryService`, состояния
+  `found/not_found/unknown/unsupported`, SQLAlchemy repository переходов и
+  восстановление точного request snapshot через миграцию `0005`. Падение до
+  write разрешает продолжить тот же intent без provider lookup; после начала
+  write только доказанный `not_found` разрешает технический retry. `found`
+  повторно проходит полную валидацию шага 13, а `unknown`, timeout,
+  неподдерживаемый lookup и неполный найденный заказ дают `needs_attention`.
+  Allocation во всех неоднозначных ветках остаётся активным. Без подтверждённого
+  QuickTickets order-lookup production transport безопасно возвращает
+  `unsupported`; `/payment/check_payment` и отмена не вызываются. Fake provider
+  подтверждает один созданный заказ при timeout и последующем recovery. Явное
+  ручное разрешение может только подтвердить отсутствие заказа/hold для retry
+  либо сохранить блокировку; объявить успех без полного observation нельзя.
 
 ## 15. Планировщик повторного бронирования
 

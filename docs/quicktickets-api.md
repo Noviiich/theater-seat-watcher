@@ -318,6 +318,22 @@ recorder. `dry_run` возвращается до вызова transport. Timeou
 истёкшая авторизация и CAPTCHA остаются отдельными исходами. Это проверка
 handoff, а не проверка оплаты: `/payment/check_payment` адаптер не вызывает.
 
+## Reconciliation изменяющего checkout
+
+Startup recovery различает сбой до первого write и сбой после зафиксированной
+стадии `write_started`. До write тот же intent можно продолжить без внешнего
+lookup. После write автоматический повтор запрещён до результата
+`found/not_found`: `found` заново проходит проверку полного заказа,
+`not_found` разрешает технический retry того же цикла, а `unknown`, timeout или
+`unsupported` переводят Candidate в `needs_attention` с активным allocation.
+
+Подтверждённого публичного QuickTickets endpoint для поиска результата
+изменяющего checkout пока нет, поэтому production reconciliation transport
+возвращает `unsupported`, а не имитирует отсутствие заказа. Известный по HAR
+`/payment/check_payment` не используется для recovery: это проверка оплаты, от
+которой пользователь отказался в автоматическом цикле. Отмена также не
+вызывается.
+
 ## Что обязательно выяснить до включения live
 
 - Где именно возникают заказ и удержание, его ID и подтверждённый состав;

@@ -168,3 +168,12 @@ class CheckoutWriteTransport(Protocol):
         self, request: CheckoutRequest, *, recorder: CheckoutStageRecorder
     ) -> ProviderCheckoutObservation:
         """Execute the browser/HTTP workflow once for the persisted intent."""
+
+
+class CheckoutObservationValidator(Protocol):
+    """Validate a provider observation without issuing another write."""
+
+    def validate_observation(
+        self, request: CheckoutRequest, observation: ProviderCheckoutObservation
+    ) -> CheckoutResult:
+        """Return CONFIRMED only for a complete, exact payment handoff."""
