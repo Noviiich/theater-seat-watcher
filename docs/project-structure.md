@@ -26,6 +26,7 @@ theater_tickets/
 │   ├── seat-selection.md
 │   ├── project-structure.md
 │   ├── operations.md
+│   ├── live-acceptance.md
 │   └── roadmap.md
 ├── config/
 │   └── halls/

@@ -6,7 +6,8 @@
 adapter, сохраняемый планировщик двадцатиминутных циклов и persistent outbox уже
 соединены полным сценарием. Реализован устойчивый lifecycle независимых фоновых
 задач, single-instance lease, graceful shutdown и runtime-диагностика.
-Развёртывание и production entrypoint остаются шагом 19.
+Dry-run развёртывание и production entrypoint завершены на шаге 19; шаг 20,
+ограниченная приёмка live-бронирования, остаётся открытым.
 
 Уточнение пользователя: оплата удержанного заказа доступна **20 минут**. Для каждого нового
 подходящего сеанса бот оформляет первый заказ сразу, а затем повторяет подбор
@@ -22,6 +23,7 @@ adapter, сохраняемый планировщик двадцатимину�
 | [seat-selection.md](seat-selection.md) | Соседство, пользовательские группы, оценка удобства |
 | [project-structure.md](project-structure.md) | Целевая структура Python-пакета и направление зависимостей |
 | [operations.md](operations.md) | Dry-run deployment, секреты, обновление, backup и restore |
+| [live-acceptance.md](live-acceptance.md) | Датированный preflight и критерии допуска к live-проверке |
 | [roadmap.md](roadmap.md) | Последовательность шагов под отдельные коммиты |
 | [../AGENTS.md](../AGENTS.md) | Инструкции для разработки |
 
