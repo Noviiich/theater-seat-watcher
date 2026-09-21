@@ -21,6 +21,7 @@ adapter, сохраняемый планировщик двадцатимину�
 | [architecture.md](architecture.md) | Компоненты, сущности, состояния, транзакции и восстановление |
 | [seat-selection.md](seat-selection.md) | Соседство, пользовательские группы, оценка удобства |
 | [project-structure.md](project-structure.md) | Целевая структура Python-пакета и направление зависимостей |
+| [operations.md](operations.md) | Dry-run deployment, секреты, обновление, backup и restore |
 | [roadmap.md](roadmap.md) | Последовательность шагов под отдельные коммиты |
 | [../AGENTS.md](../AGENTS.md) | Инструкции для разработки |
 

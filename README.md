@@ -7,11 +7,10 @@ Telegram-бот отслеживает новые сеансы Орловско�
 Реализованы read-only QuickTickets-клиент, обнаружение сеансов, подбор мест,
 durable planning, строгий checkout-handoff и сохраняемый планировщик повторных
 циклов, persistent outbox с Telegram-кнопками оплаты, полный прикладной сценарий
-и устойчивый runtime-компонент с независимыми polling-задачами, backoff,
-single-instance lock и диагностикой. Режим по умолчанию — `dry_run`, в котором
-write transport не вызывается. Production entrypoint и контейнер относятся к
-шагу 19; текущая команда `python -m theater_tickets` остаётся безопасной
-проверкой конфигурации без сетевых операций.
+и устойчивый runtime с независимыми polling-задачами, backoff, single-instance
+lock и диагностикой. Добавлены production CLI, контейнер/Compose, автоматические
+миграции и SQLite backup/restore. Режим по умолчанию — `dry_run`, в котором
+write transport отсутствует; live защищён gate до приёмки шага 20.
 
 ## Требования
 
@@ -22,18 +21,19 @@ write transport не вызывается. Production entrypoint и контей
 
 ```bash
 uv sync --all-groups
-uv run python -m theater_tickets
+uv run python -m theater_tickets diagnose
 uv run ruff check .
 uv run ruff format --check .
 uv run mypy src
 uv run pytest
 ```
 
-Для будущих настроек скопируйте `.env.example` в `.env` и задайте значения вне
-Git. Пока `.env` не загружается автоматически, а статус CLI не показывает секреты.
+Для запуска скопируйте `.env.example` в `.env`, задайте значения вне Git и
+следуйте [эксплуатационной инструкции](docs/operations.md). Python сам не загружает
+`.env`; Compose передаёт его процессу. Диагностика CLI не показывает секреты.
 
-Не включайте `BOOKING_MODE=live` до эксплуатационной настройки шага 19 и
-ограниченной реальной приёмки шага 20 из [roadmap](docs/roadmap.md).
+Не включайте `BOOKING_MODE=live` до ограниченной реальной приёмки шага 20
+из [roadmap](docs/roadmap.md): production entrypoint сейчас безопасно отклонит live.
 Checkout и startup recovery уже отклоняют
 неполный или неподтверждённый handoff, но оплату всегда совершает пользователь
 на стороне продавца.
@@ -43,4 +43,4 @@ Checkout и startup recovery уже отклоняют
 (`0600`) и содержать ровно `lastname`, `firstname`, `middlename`, `email`,
 `phone`, `personal_data_consent: true`. Не отправляйте этот файл, его значения
 или путь в Git, логи либо Telegram. Само наличие профиля не включает checkout:
-требуется production-композиция шага 19 и явный live-режим.
+требуется успешная приёмка и отдельное снятие live-gate.

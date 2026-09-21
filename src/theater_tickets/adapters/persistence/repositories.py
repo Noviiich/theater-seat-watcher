@@ -99,10 +99,18 @@ class SubscriptionRepository:
             buyer.telegram_chat_id = telegram_chat_id
         return buyer
 
-    async def add(self, value: Subscription, *, telegram_chat_id: str) -> Subscription:
+    async def add(
+        self,
+        value: Subscription,
+        *,
+        telegram_chat_id: str,
+        profile_ref: str | None = None,
+    ) -> Subscription:
         buyer = await self.get_or_create_buyer(
             telegram_user_id=value.buyer_id, telegram_chat_id=telegram_chat_id
         )
+        if profile_ref is not None:
+            buyer.profile_ref = profile_ref
         self._session.add(
             SubscriptionModel(
                 id=value.subscription_id,

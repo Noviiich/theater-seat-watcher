@@ -307,3 +307,12 @@ SQLite lease обновляется отдельным heartbeat и не даё�
 просроченный lease можно безопасно забрать после падения. Shutdown сначала
 запрещает новые итерации, затем ограниченно ждёт текущие и отменяет оставшиеся:
 persisted `submitting` после старта проходит обычный reconcile.
+
+Production CLI выполняет migrate → integrity/schema smoke → runtime. Контейнер
+работает без root, с read-only root filesystem, одним bot service и отдельными
+named volumes для SQLite и backup. Текущая concrete composition допускает только
+`dry_run`; write transport не создаётся, а глобальный `BOOKING_MODE=live`
+отклоняется до приёмки. Публичный QuickTickets provider строит complete catalogue
+только при явных event/hall ID и согласованных timezone-aware session details.
+SQLite backup/restore использует Backup API, а не копирование main-файла WAL-БД;
+restore сохраняет pre-restore копию и проверяет integrity до атомарной замены.

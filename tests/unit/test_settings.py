@@ -18,6 +18,8 @@ def test_settings_default_to_dry_run_and_twenty_minute_hold_intervals() -> None:
     assert settings.renewal_interval_seconds == 1200
     assert settings.expected_hold_ttl_seconds == 1200
     assert settings.availability_retry_seconds == 180
+    assert settings.theatre_alias == "orel-teatr-svobodnoe-prostranstvo"
+    assert settings.hall_profiles_path.as_posix() == "config/halls"
 
 
 @pytest.mark.parametrize(
@@ -54,6 +56,7 @@ def test_settings_do_not_retain_secret_values() -> None:
     assert settings.allowed_user_ids_configured is True
     assert settings.database_url_configured is True
     assert "a-secret-token" not in repr(settings)
+    assert "secret.db" not in repr(settings)
 
 
 def test_settings_parse_numeric_telegram_allowlist() -> None:
@@ -77,3 +80,25 @@ def test_live_mode_requires_private_buyer_profile_path() -> None:
 
     assert settings.buyer_profile_path is not None
     assert "buyer.json" not in repr(settings)
+
+
+def test_runtime_requires_private_infrastructure_and_keeps_live_gate_closed() -> None:
+    complete = {
+        "TELEGRAM_BOT_TOKEN": "123456:valid-looking-token",
+        "ALLOWED_TELEGRAM_USER_IDS": "10",
+        "DATABASE_URL": "sqlite+aiosqlite:///data/app.sqlite3",
+    }
+    Settings.from_environ(complete).validate_runtime()
+
+    with pytest.raises(ValueError, match="TELEGRAM_BOT_TOKEN"):
+        Settings.from_environ({}).validate_runtime()
+    with pytest.raises(ValueError, match=r"sqlite\+aiosqlite"):
+        Settings.from_environ({**complete, "DATABASE_URL": "postgresql://db"}).validate_runtime()
+    with pytest.raises(ValueError, match="live acceptance"):
+        Settings.from_environ(
+            {
+                **complete,
+                "BOOKING_MODE": "live",
+                "BUYER_PROFILE_PATH": "/private/buyer.json",
+            }
+        ).validate_runtime()

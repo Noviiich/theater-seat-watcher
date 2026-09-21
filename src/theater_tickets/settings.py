@@ -81,6 +81,10 @@ class Settings:
     telegram_token_configured: bool
     allowed_user_ids_configured: bool
     database_url_configured: bool
+    telegram_bot_token: str | None = field(default=None, repr=False)
+    database_url: str | None = field(default=None, repr=False)
+    theatre_alias: str = "orel-teatr-svobodnoe-prostranstvo"
+    hall_profiles_path: Path = Path("config/halls")
     buyer_profile_path: Path | None = field(default=None, repr=False)
     allowed_telegram_user_ids: frozenset[str] = frozenset()
 
@@ -88,8 +92,14 @@ class Settings:
     def from_environ(cls, env: Mapping[str, str] | None = None) -> Settings:
         """Create settings from an environment mapping without loading files."""
         source = environ if env is None else env
+        telegram_bot_token = source.get("TELEGRAM_BOT_TOKEN") or None
+        database_url = source.get("DATABASE_URL") or None
         allowed_telegram_user_ids = _allowed_user_ids(source.get("ALLOWED_TELEGRAM_USER_IDS"))
         buyer_profile_path = _buyer_profile_path(source.get("BUYER_PROFILE_PATH"))
+        hall_profiles_path = _path(source.get("HALL_PROFILES_PATH"), default=Path("config/halls"))
+        theatre_alias = source.get("THEATRE_ALIAS", "orel-teatr-svobodnoe-prostranstvo").strip()
+        if not theatre_alias:
+            raise ValueError("THEATRE_ALIAS must not be empty")
         booking_mode = _booking_mode(source.get("BOOKING_MODE"))
         if booking_mode is BookingMode.LIVE and buyer_profile_path is None:
             raise ValueError("BOOKING_MODE=live requires BUYER_PROFILE_PATH")
@@ -140,15 +150,40 @@ class Settings:
                 name="AVAILABILITY_RETRY_SECONDS",
                 default=180,
             ),
-            telegram_token_configured=bool(source.get("TELEGRAM_BOT_TOKEN")),
+            telegram_token_configured=telegram_bot_token is not None,
             allowed_user_ids_configured=bool(allowed_telegram_user_ids),
-            database_url_configured=bool(source.get("DATABASE_URL")),
+            database_url_configured=database_url is not None,
+            telegram_bot_token=telegram_bot_token,
+            database_url=database_url,
+            theatre_alias=theatre_alias,
+            hall_profiles_path=hall_profiles_path,
             allowed_telegram_user_ids=allowed_telegram_user_ids,
             buyer_profile_path=buyer_profile_path,
         )
+
+    def validate_runtime(self) -> None:
+        """Require concrete infrastructure while keeping all secret values private."""
+        if self.telegram_bot_token is None:
+            raise ValueError("runtime requires TELEGRAM_BOT_TOKEN")
+        if not self.allowed_telegram_user_ids:
+            raise ValueError("runtime requires ALLOWED_TELEGRAM_USER_IDS")
+        if self.database_url is None:
+            raise ValueError("runtime requires DATABASE_URL")
+        if not self.database_url.startswith("sqlite+aiosqlite:///"):
+            raise ValueError("runtime DATABASE_URL must use sqlite+aiosqlite with a file path")
+        if self.booking_mode is BookingMode.LIVE:
+            raise ValueError(
+                "BOOKING_MODE=live remains locked until the explicit live acceptance step"
+            )
 
 
 def _buyer_profile_path(value: str | None) -> Path | None:
     if value is None or not value.strip():
         return None
+    return Path(value).expanduser()
+
+
+def _path(value: str | None, *, default: Path) -> Path:
+    if value is None or not value.strip():
+        return default
     return Path(value).expanduser()

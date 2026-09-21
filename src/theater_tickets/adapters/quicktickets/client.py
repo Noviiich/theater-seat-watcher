@@ -73,12 +73,26 @@ class QuickTicketsClient:
 
     async def get_context(self, session_id: str | int) -> QuickTicketsContext:
         """Fetch a public session page and extract its transient API token."""
+        _, context = await self.get_session_page(session_id)
+        return context
+
+    async def get_catalogue_page(self) -> str:
+        """Fetch the public theatre catalogue without exposing its URL upstream."""
+        response = await self._request(
+            "GET",
+            f"{self.site_base_url}/{self.theatre_alias}",
+            expected_json=False,
+        )
+        return response.text
+
+    async def get_session_page(self, session_id: str | int) -> tuple[str, QuickTicketsContext]:
+        """Fetch one session page and return HTML with its transient read context."""
         page_url = f"{self.site_base_url}/{self.theatre_alias}/s{session_id}"
         response = await self._request("GET", page_url, expected_json=False)
         match = TOKEN_PATTERN.search(response.text)
         if match is None:
             raise QuickTicketsContractError("public session page has no set_token")
-        return QuickTicketsContext(token=match.group(1), session_page_url=page_url)
+        return response.text, QuickTicketsContext(token=match.group(1), session_page_url=page_url)
 
     async def get_json(
         self,

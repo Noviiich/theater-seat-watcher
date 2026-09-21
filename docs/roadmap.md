@@ -421,7 +421,7 @@
 
 ## 19. Развёртывание и эксплуатационная документация
 
-- [ ] Commit: `chore: add deployment and database recovery workflow`.
+- [x] Commit: `chore: add deployment and database recovery workflow`.
 - Зависимости: 18.
 - Добавить контейнер/compose с одним экземпляром, постоянным volume, запуском
   миграций и restart policy. В README/docs описать секреты, настройку профиля,
@@ -431,6 +431,18 @@
   обновления, восстановление SQLite через корректную резервную копию.
 - Проверка: сборка, dry-run smoke, перезапуск с volume, backup/restore и проверка
   сохранённых dedup/budget ключей. Тесты не обращаются к live checkout.
+- Выполнено 21.09.2026: добавлены non-root multi-stage image, Compose с одним
+  bot service, restart policy, read-only root filesystem и отдельными volumes
+  БД/backup. Production CLI поддерживает `diagnose`, `migrate`, `smoke`, `run`,
+  online `backup` и остановленный `restore`; runtime перед workers выполняет
+  migrations и schema/integrity check. SQLite Backup API и pre-restore safety
+  copy сохраняют WAL-состояние, dedup/outbox, allocation и историю циклов.
+  Concrete QuickTickets provider подключает complete catalogue и свежие public
+  reads к dry-run runtime; live startup gate остаётся закрыт до шага 20 и write
+  transport не создаётся. `docs/operations.md` описывает секреты, hall/buyer
+  profiles, первый запуск, обновление, 1200-секундные циклы, stop,
+  `needs_attention`, backup/restore и подготовку live. Compose config, сборка
+  image и локальные migrate/smoke/restart/restore тесты проходят.
 
 ## 20. Приёмка реального сценария
 

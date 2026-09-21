@@ -1,8 +1,14 @@
 from __future__ import annotations
 
+from decimal import Decimal
+
 import pytest
 
-from theater_tickets.adapters.quicktickets.profiles import parse_hall_profile
+from theater_tickets.adapters.quicktickets.profiles import (
+    DirectorySeatProfileSource,
+    load_seat_selection_configuration,
+    parse_hall_profile,
+)
 from theater_tickets.domain.errors import DomainValidationError
 from theater_tickets.domain.models import Money, Seat, SeatAvailability
 from theater_tickets.domain.seating.topology import topology_fingerprint
@@ -147,3 +153,36 @@ def test_profile_detects_geometry_and_row_mismatch() -> None:
         rotation=0,
     )
     assert not profile.matches_inventory(tuple(wrong_row))
+
+
+def test_runtime_profile_loads_exact_decimal_selection_and_blocks_path_traversal(
+    tmp_path,
+) -> None:
+    profile_path = tmp_path / "hall-16-v1.yaml"
+    profile_path.write_text(
+        """
+profile_id: hall-16-v1
+hall_id: "16"
+topology_fingerprint: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+mode: automatic
+row_segments:
+  - id: main
+    block: stalls
+    row: "1"
+    seat_ids: ["1", "2"]
+preferred_groups: []
+selection:
+  row_quality: {"1": "1.00"}
+  weights: {row: "0.40", center: "0.35", price: "0.15", aisle: "0.10"}
+  min_quality: "0.60"
+  view_axis_x: "100"
+  normalization_width: "100"
+  aisle_quality: {main: "0.80"}
+""".strip(),
+        encoding="utf-8",
+    )
+    configuration = load_seat_selection_configuration(profile_path)
+    assert configuration.preferences.min_quality == Decimal("0.60")
+    assert DirectorySeatProfileSource(tmp_path).load("hall-16-v1") == configuration
+    with pytest.raises(LookupError, match="invalid"):
+        DirectorySeatProfileSource(tmp_path).load("../private")

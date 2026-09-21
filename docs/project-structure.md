@@ -2,7 +2,8 @@
 
 Сейчас уже существуют базовый Python-пакет, настройки, чистые модели домена,
 SQLite adapter, Alembic-миграции, сценарий discovery → checkout → outbox и
-устойчивый lifecycle фоновых задач с runtime-диагностикой.
+устойчивый lifecycle фоновых задач с runtime-диагностикой. Добавлены production
+CLI, контейнер и операции SQLite backup/restore.
 Ниже — **целевая** структура, которая создаётся постепенно по roadmap; пустые
 модули заранее не нужны.
 
@@ -24,6 +25,7 @@ theater_tickets/
 │   ├── architecture.md
 │   ├── seat-selection.md
 │   ├── project-structure.md
+│   ├── operations.md
 │   └── roadmap.md
 ├── config/
 │   └── halls/
@@ -32,6 +34,7 @@ theater_tickets/
 │   ├── __init__.py
 │   ├── __main__.py                 # Запуск через python -m theater_tickets
 │   ├── bootstrap.py                # Сборка зависимостей и lifecycle задач
+│   ├── production.py               # Concrete dry-run composition
 │   ├── settings.py
 │   ├── domain/
 │   │   ├── models.py               # Session, Seat, Group, Money, Preferences
@@ -60,6 +63,7 @@ theater_tickets/
 │   │   │   ├── client.py           # HTTP GET, headers, timeouts, rate limiting
 │   │   │   ├── catalogue.py        # Парсинг афиши, JSON-LD и iframe context
 │   │   │   ├── inventory.py        # Схема + занятость + capabilities
+│   │   │   ├── provider.py         # Catalogue + fresh session/inventory reads
 │   │   │   ├── dto.py              # Внешние форматы и validation
 │   │   │   ├── checkout.py         # Проверенная цепочка оформления
 │   │   │   ├── reconciliation.py   # found/not-found/unknown/unsupported
@@ -80,13 +84,15 @@ theater_tickets/
 │   │       ├── models.py           # ORM отдельно от domain.models
 │   │       ├── repositories.py
 │   │       └── unit_of_work.py
-│   └── workers/
+│   ├── workers/
 │       ├── polling.py
 │       ├── runtime.py              # Независимые loops, backoff и graceful shutdown
 │       ├── booking.py              # Live/dry-run/resume и one-shot workflow
 │       ├── renewals.py             # Сохранённые next_run_at, без повторов пропущенных тиков
 │       ├── reconciliation.py
 │       └── outbox.py
+│   └── operations/
+│       └── database.py             # Migrate/smoke/SQLite backup/restore
 ├── tests/
 │   ├── unit/
 │   ├── contract/

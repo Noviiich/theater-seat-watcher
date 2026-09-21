@@ -64,6 +64,7 @@ def build_subscription_router(
     status_reader: StatusReader | None = None,
     now: Callable[[], datetime] | None = None,
     catalogue_stale_after_seconds: int = 180,
+    buyer_profile_ref: str | None = None,
 ) -> Router:
     router = Router(name="subscriptions")
     clock = now or (lambda: datetime.now(UTC))
@@ -80,7 +81,11 @@ def build_subscription_router(
             await message.answer(value)
             return
         async with session_factory() as session, session.begin():
-            await SubscriptionRepository(session).add(value, telegram_chat_id=str(message.chat.id))
+            await SubscriptionRepository(session).add(
+                value,
+                telegram_chat_id=str(message.chat.id),
+                profile_ref=buyer_profile_ref,
+            )
         await message.answer(
             f"Подписка сохранена: {value.subscription_id}.\n"
             f"{value.ticket_count} билет(а), профиль {value.seat_profile_id}, режим dry_run."

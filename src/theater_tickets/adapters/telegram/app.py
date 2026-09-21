@@ -15,6 +15,7 @@ def build_dispatcher(
     allowed_user_ids: frozenset[str],
     session_factory: async_sessionmaker[AsyncSession],
     catalogue_stale_after_seconds: int = 180,
+    buyer_profile_ref: str | None = None,
 ) -> Dispatcher:
     """Build an owner-scoped dispatcher for the runtime long-polling task."""
     dispatcher = Dispatcher()
@@ -26,6 +27,7 @@ def build_dispatcher(
             session_factory,
             status_reader=SqlAlchemyStatusReader(session_factory),
             catalogue_stale_after_seconds=catalogue_stale_after_seconds,
+            buyer_profile_ref=buyer_profile_ref,
         )
     )
     return dispatcher
