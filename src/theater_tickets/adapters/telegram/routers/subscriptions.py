@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from datetime import UTC, datetime
 from uuid import uuid4
 
 from aiogram import F, Router
@@ -10,6 +12,7 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from theater_tickets.adapters.persistence.repositories import SubscriptionRepository
+from theater_tickets.application.status import StatusReader, render_status
 from theater_tickets.domain.models import BookingMode, Money, Subscription
 
 THEATRE_ALIAS = "orel-teatr-svobodnoe-prostranstvo"
@@ -55,8 +58,15 @@ def _new_subscription(command: CommandObject, user_id: str) -> Subscription | st
     )
 
 
-def build_subscription_router(session_factory: async_sessionmaker[AsyncSession]) -> Router:
+def build_subscription_router(
+    session_factory: async_sessionmaker[AsyncSession],
+    *,
+    status_reader: StatusReader | None = None,
+    now: Callable[[], datetime] | None = None,
+    catalogue_stale_after_seconds: int = 180,
+) -> Router:
     router = Router(name="subscriptions")
+    clock = now or (lambda: datetime.now(UTC))
 
     @router.message(Command("start", "help"))
     async def help_command(message: Message) -> None:
@@ -83,7 +93,7 @@ def build_subscription_router(session_factory: async_sessionmaker[AsyncSession])
             "свежей схемы. Сейчас подбор не запускается."
         )
 
-    @router.message(Command("subscriptions", "settings", "status", "orders"))
+    @router.message(Command("subscriptions", "settings", "orders"))
     async def list_subscriptions(message: Message) -> None:
         assert message.from_user is not None
         async with session_factory() as session:
@@ -91,6 +101,22 @@ def build_subscription_router(session_factory: async_sessionmaker[AsyncSession])
                 str(message.from_user.id)
             )
         await message.answer(_summary(items))
+
+    @router.message(Command("status"))
+    async def status(message: Message) -> None:
+        assert message.from_user is not None
+        if status_reader is None:
+            await message.answer("Runtime-диагностика ещё не подключена.")
+            return
+        current = clock()
+        report = await status_reader.for_user(str(message.from_user.id), now=current)
+        await message.answer(
+            render_status(
+                report,
+                now=current,
+                stale_after_seconds=catalogue_stale_after_seconds,
+            )
+        )
 
     @router.message(Command("pause", "resume"))
     async def set_subscription(message: Message, command: CommandObject) -> None:

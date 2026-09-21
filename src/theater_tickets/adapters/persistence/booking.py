@@ -335,6 +335,48 @@ class SqlAlchemyBatchSummaryScheduler:
             )
         return tuple(outbox_ids)
 
+    async def enqueue_pending(self, *, now: datetime) -> tuple[str, ...]:
+        """Enqueue summaries only after every candidate in a buyer/batch group was attempted."""
+        async with self._session_factory() as database:
+            rows = (
+                await database.execute(
+                    select(CandidateModel, SessionModel)
+                    .join(SessionModel, SessionModel.id == CandidateModel.session_id)
+                    .order_by(
+                        CandidateModel.discovery_batch_id,
+                        CandidateModel.buyer_id,
+                        SessionModel.starts_at,
+                        CandidateModel.id,
+                    )
+                )
+            ).all()
+        grouped: dict[tuple[str, str], list[tuple[CandidateModel, SessionModel]]] = {}
+        for candidate, session in rows:
+            grouped.setdefault((candidate.discovery_batch_id, candidate.buyer_id), []).append(
+                (candidate, session)
+            )
+        outbox_ids: list[str] = []
+        unfinished = {"queued", "processing", "dry_run_queued", "dry_run_processing"}
+        for (batch_id, buyer_id), values in grouped.items():
+            if any(candidate.tracking_state in unfinished for candidate, _ in values):
+                continue
+            results = tuple(
+                BatchSessionResult(
+                    session.title,
+                    self._status(candidate.tracking_state, candidate.stop_reason),
+                )
+                for candidate, session in values
+            )
+            outbox_ids.append(
+                await self._writer.enqueue_batch_summary(
+                    discovery_batch_id=batch_id,
+                    buyer_id=buyer_id,
+                    results=results,
+                    recorded_at=now,
+                )
+            )
+        return tuple(outbox_ids)
+
     @staticmethod
     def _status(state: str, reason: str | None) -> str:
         return {

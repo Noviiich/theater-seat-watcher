@@ -430,6 +430,7 @@ class SqlAlchemyOutboxRepository:
                 expires_at=expires_at,
             ),
             attempts=message.attempts,
+            expires_at=expires_at,
             payment_url=order.payment_url,
             stop_callback_data=f"stop:{candidate.id}",
             previous_message_id=(

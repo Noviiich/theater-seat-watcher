@@ -276,7 +276,9 @@ Transactional outbox даёт доставку с возможными повт�
 ## Эксплуатация
 
 - Конфигурация: `TELEGRAM_BOT_TOKEN`, `ALLOWED_TELEGRAM_USER_IDS`, `DATABASE_URL`,
-  `BOOKING_MODE=dry_run`, `POLL_INTERVAL_SECONDS=60`,
+  `BOOKING_MODE=dry_run`, `POLL_INTERVAL_SECONDS=60`, `POLL_JITTER_SECONDS=10`,
+  `WORKER_INTERVAL_SECONDS=5`, `RUNTIME_MAX_BACKOFF_SECONDS=300`,
+  `RUNTIME_LOCK_LEASE_SECONDS=30`, `SHUTDOWN_GRACE_SECONDS=30`,
   `RENEWAL_INTERVAL_SECONDS=1200`, `EXPECTED_HOLD_TTL_SECONDS=1200`,
   `AVAILABILITY_RETRY_SECONDS=180`, путь профиля покупателя,
   путь приватного checkout-контекста. Секреты отдельно от YAML профиля зала.
@@ -296,3 +298,12 @@ Transactional outbox даёт доставку с возможными повт�
   не копированием только main-файла работающей WAL-БД. Проверять восстановление.
 - Несколько пользователей/реплик и PostgreSQL — отдельный будущий этап;
   распределённые блокировки нельзя считать обеспеченными настройками MVP.
+
+Runtime реализован отдельными resilient loops каталога, booking/recovery,
+outbox и Telegram. Ошибка одного loop сохраняет тип ошибки и следующий запуск,
+после чего применяется ограниченный экспоненциальный backoff; подтверждённый
+`retry_after` имеет приоритет. Успешный polling каталога получает jitter ±10 секунд.
+SQLite lease обновляется отдельным heartbeat и не даёт запустить второй экземпляр;
+просроченный lease можно безопасно забрать после падения. Shutdown сначала
+запрещает новые итерации, затем ограниченно ждёт текущие и отменяет оставшиеся:
+persisted `submitting` после старта проходит обычный reconcile.

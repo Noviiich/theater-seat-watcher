@@ -392,10 +392,25 @@ class BookingWorkflow:
         return WorkflowOutcome(discovery.candidate_ids, live, dry, notifications)
 
     async def run_due(self, *, now: datetime) -> WorkflowOutcome:
+        booking = await self.run_booking_due(now=now)
+        notifications = await self.run_outbox_due(now=now)
+        return WorkflowOutcome(
+            (),
+            booking.live_processed,
+            booking.dry_run_processed,
+            notifications,
+        )
+
+    async def run_booking_due(self, *, now: datetime) -> WorkflowOutcome:
+        """Process booking state without waiting for Telegram delivery."""
         live = await self._renewal_worker.run_once(now=now)
         dry = await self._dry_run_worker.run_once(now=now)
-        notifications = await self._outbox_worker.run_once(now=now)
-        return WorkflowOutcome((), live, dry, notifications)
+        await self._summaries.enqueue_pending(now=now)
+        return WorkflowOutcome((), live, dry, 0)
+
+    async def run_outbox_due(self, *, now: datetime) -> int:
+        """Deliver notifications independently from provider polling and checkout."""
+        return await self._outbox_worker.run_once(now=now)
 
     async def recover_startup(self, *, now: datetime) -> None:
         if self._checkout_recovery is not None:

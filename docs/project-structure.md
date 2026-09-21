@@ -1,7 +1,8 @@
 # Структура проекта
 
 Сейчас уже существуют базовый Python-пакет, настройки, чистые модели домена,
-SQLite adapter, Alembic-миграции и one-shot сценарий discovery → checkout → outbox.
+SQLite adapter, Alembic-миграции, сценарий discovery → checkout → outbox и
+устойчивый lifecycle фоновых задач с runtime-диагностикой.
 Ниже — **целевая** структура, которая создаётся постепенно по roadmap; пустые
 модули заранее не нужны.
 
@@ -50,8 +51,11 @@ theater_tickets/
 │   │   ├── booking.py              # Повторная проверка и provider-neutral решение
 │   │   ├── renewals.py             # Сроки циклов, ожидания и повтор после 1200 секунд
 │   │   ├── outbox.py                # Сообщения оплаты, batch summary и порты доставки
+│   │   ├── runtime.py              # Контракты lifecycle/lock/диагностики
+│   │   ├── status.py               # Owner-scoped модель расширенного /status
 │   │   └── reconciliation.py       # Startup recovery без повтора неизвестного POST
 │   ├── adapters/
+│   │   ├── logging.py              # JSON-события с очисткой секретов
 │   │   ├── quicktickets/
 │   │   │   ├── client.py           # HTTP GET, headers, timeouts, rate limiting
 │   │   │   ├── catalogue.py        # Парсинг афиши, JSON-LD и iframe context
@@ -71,12 +75,14 @@ theater_tickets/
 │   │       ├── outbox.py            # Order + outbox атомарно, claim/retry/supersede
 │   │       ├── reconciliation.py   # Recovery states и request snapshot
 │   │       ├── renewals.py         # Атомарный claim, next_run_at и release allocation
+│   │       ├── runtime.py          # Lease-lock, worker state и status queries
 │   │       ├── database.py
 │   │       ├── models.py           # ORM отдельно от domain.models
 │   │       ├── repositories.py
 │   │       └── unit_of_work.py
 │   └── workers/
 │       ├── polling.py
+│       ├── runtime.py              # Независимые loops, backoff и graceful shutdown
 │       ├── booking.py              # Live/dry-run/resume и one-shot workflow
 │       ├── renewals.py             # Сохранённые next_run_at, без повторов пропущенных тиков
 │       ├── reconciliation.py

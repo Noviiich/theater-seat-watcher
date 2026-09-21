@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import datetime, timedelta
 
 from theater_tickets.application.outbox import (
@@ -9,6 +10,7 @@ from theater_tickets.application.outbox import (
     NotificationTransport,
     OutboxRepository,
 )
+from theater_tickets.application.status import remaining_ttl_line
 
 
 class OutboxWorker:
@@ -54,7 +56,16 @@ class OutboxWorker:
                 except Exception:
                     pass
             try:
-                message_id = await self._transport.send(item)
+                delivered = item
+                if item.expires_at is not None:
+                    delivered = replace(
+                        item,
+                        text=(
+                            f"{item.text}\n"
+                            f"{remaining_ttl_line(expires_at=item.expires_at, now=now)}"
+                        ),
+                    )
+                message_id = await self._transport.send(delivered)
             except NotificationRateLimited as exc:
                 await self._repository.schedule_retry(
                     outbox_id=item.outbox_id,

@@ -137,7 +137,10 @@ def test_timeout_after_send_retries_after_restart_with_stable_identity(tmp_path:
         assert await restarted.recover_startup(now=now + timedelta(seconds=31)) == 1
         assert await restarted.run_once(now=now + timedelta(seconds=31)) == 1
         assert len(telegram.sent) == 3
-        assert telegram.sent[0].text == telegram.sent[1].text == telegram.sent[2].text
+        assert "До окончания удержания:" in telegram.sent[0].text
+        assert "До окончания удержания:" not in telegram.sent[1].text
+        assert "До окончания удержания:" in telegram.sent[2].text
+        assert telegram.sent[0].text != telegram.sent[1].text
         assert "цикл №1" in telegram.sent[2].text
         async with factory() as database:
             outbox = await database.scalar(select(OutboxMessageModel))

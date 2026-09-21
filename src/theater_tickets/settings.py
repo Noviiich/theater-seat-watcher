@@ -32,6 +32,18 @@ def _positive_int(value: str | None, *, name: str, default: int) -> int:
     return parsed
 
 
+def _non_negative_int(value: str | None, *, name: str, default: int) -> int:
+    if value is None or value == "":
+        return default
+    try:
+        parsed = int(value)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be a non-negative integer") from exc
+    if parsed < 0:
+        raise ValueError(f"{name} must be a non-negative integer")
+    return parsed
+
+
 def _booking_mode(value: str | None) -> BookingMode:
     if value is None or value == "":
         return BookingMode.DRY_RUN
@@ -58,6 +70,11 @@ class Settings:
 
     booking_mode: BookingMode
     poll_interval_seconds: int
+    poll_jitter_seconds: int
+    worker_interval_seconds: int
+    runtime_max_backoff_seconds: int
+    runtime_lock_lease_seconds: int
+    shutdown_grace_seconds: int
     renewal_interval_seconds: int
     expected_hold_ttl_seconds: int
     availability_retry_seconds: int
@@ -82,6 +99,31 @@ class Settings:
                 source.get("POLL_INTERVAL_SECONDS"),
                 name="POLL_INTERVAL_SECONDS",
                 default=60,
+            ),
+            poll_jitter_seconds=_non_negative_int(
+                source.get("POLL_JITTER_SECONDS"),
+                name="POLL_JITTER_SECONDS",
+                default=10,
+            ),
+            worker_interval_seconds=_positive_int(
+                source.get("WORKER_INTERVAL_SECONDS"),
+                name="WORKER_INTERVAL_SECONDS",
+                default=5,
+            ),
+            runtime_max_backoff_seconds=_positive_int(
+                source.get("RUNTIME_MAX_BACKOFF_SECONDS"),
+                name="RUNTIME_MAX_BACKOFF_SECONDS",
+                default=300,
+            ),
+            runtime_lock_lease_seconds=_positive_int(
+                source.get("RUNTIME_LOCK_LEASE_SECONDS"),
+                name="RUNTIME_LOCK_LEASE_SECONDS",
+                default=30,
+            ),
+            shutdown_grace_seconds=_positive_int(
+                source.get("SHUTDOWN_GRACE_SECONDS"),
+                name="SHUTDOWN_GRACE_SECONDS",
+                default=30,
             ),
             renewal_interval_seconds=_positive_int(
                 source.get("RENEWAL_INTERVAL_SECONDS"),

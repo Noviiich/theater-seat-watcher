@@ -42,6 +42,7 @@ class OutboxItem:
     destination_user_id: str
     text: str
     attempts: int
+    expires_at: datetime | None = None
     payment_url: str | None = None
     stop_callback_data: str | None = None
     previous_message_id: str | None = None

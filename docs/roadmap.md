@@ -392,12 +392,11 @@
   но не создаёт intent/allocation/POST и не становится live задним числом.
   Fake provider/Telegram проверяют несколько сеансов, разные batch-результаты,
   позднюю продажу, отсутствие группы, seat conflict, общий бюджет, stop одного
-  сеанса, повторные циклы и восстановление сохранённого intent. Фоновый lifecycle,
-  backoff и runtime lock остаются шагом 18.
+  сеанса, повторные циклы и восстановление сохранённого intent.
 
 ## 18. Runtime и наблюдаемость
 
-- [ ] Commit: `feat: add resilient polling workers and runtime diagnostics`.
+- [x] Commit: `feat: add resilient polling workers and runtime diagnostics`.
 - Зависимости: 17.
 - Добавить lifecycle фоновых задач, интервал/jitter/backoff, runtime lock,
   graceful shutdown, безопасные структурированные логи и расширенный `/status`.
@@ -406,6 +405,19 @@
   перезапуск поднимает сохранённую очередь, второй экземпляр не стартует.
 - Проверка: временно недоступный провайдер, серия 429, shutdown во время
   оформления, устаревший baseline, очередь outbox и очистка секретов в логах.
+- Выполнено 21.09.2026: каталог, booking, outbox и Telegram запускаются как
+  независимые resilient loops с interruptible interval/jitter, экспоненциальным
+  backoff и приоритетом `retry_after`. Миграция `0009` добавляет SQLite lease,
+  запрещающий второй runtime, и безопасное состояние worker для диагностики.
+  Startup recovery выполняется до циклов; graceful shutdown ограниченно ждёт
+  текущий I/O и оставляет persisted checkout для reconcile при рестарте.
+  `/status` показывает свежесть афиши, очередь outbox, ambiguous writes,
+  следующий цикл, ожидание/остановку и TTL; сообщение оплаты вычисляет остаток
+  удержания непосредственно перед доставкой. JSON-логи не включают exception
+  text и очищают токены, Authorization, cookies, профиль и payment URL.
+  Интеграционные тесты подтверждают сохранение baseline при сбое провайдера,
+  lease takeover после срока, очередь/status и независимость медленных задач;
+  unit/contract тесты покрывают 429, backoff, shutdown и очистку логов.
 
 ## 19. Развёртывание и эксплуатационная документация
 

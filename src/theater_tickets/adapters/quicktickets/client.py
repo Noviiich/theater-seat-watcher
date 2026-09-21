@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import math
 import re
 import time
 from collections.abc import Mapping
@@ -141,9 +142,10 @@ class QuickTicketsClient:
             if response.status_code in {401, 403}:
                 raise QuickTicketsAuthError(f"QuickTickets returned HTTP {response.status_code}")
             if response.status_code == 429:
+                retry_after = self._retry_after(response, attempt)
                 if attempt >= self.max_retries:
-                    raise QuickTicketsRateLimitError("QuickTickets rate limit remained")
-                await asyncio.sleep(self._retry_after(response, attempt))
+                    raise QuickTicketsRateLimitError(math.ceil(retry_after))
+                await asyncio.sleep(retry_after)
                 continue
             if 500 <= response.status_code < 600:
                 if attempt >= self.max_retries:

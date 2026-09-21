@@ -22,8 +22,8 @@ Python-бот для Telegram отслеживает новые сеансы О�
 Алгоритм мест: [seat-selection.md](docs/seat-selection.md).
 Размещение модулей: [project-structure.md](docs/project-structure.md).
 
-Созданы базовый пакет, домен, SQLite-хранилище и one-shot сценарий от discovery
-до checkout/renewals/outbox; lifecycle фонового runtime ещё не реализован.
+Созданы базовый пакет, домен, SQLite-хранилище, полный прикладной сценарий и
+устойчивый lifecycle фонового runtime с диагностикой; развёртывание ещё не реализовано.
 Дерево исходников в документации дополняется по roadmap. Не объявлять этап
 выполненным без реализации и соответствующей проверки.
 

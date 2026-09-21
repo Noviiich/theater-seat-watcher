@@ -98,5 +98,6 @@ def test_client_raises_after_bounded_rate_limit() -> None:
             ) as client:
                 await client.get_context("1")
 
-    with pytest.raises(QuickTicketsRateLimitError):
+    with pytest.raises(QuickTicketsRateLimitError) as captured:
         run(scenario())
+    assert captured.value.retry_after_seconds == 1

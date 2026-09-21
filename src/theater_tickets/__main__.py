@@ -1,4 +1,4 @@
-"""Command-line entry point for the safe initial application shell."""
+"""Safe configuration diagnostic; production runtime wiring is a deployment concern."""
 
 from __future__ import annotations
 

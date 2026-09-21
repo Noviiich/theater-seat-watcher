@@ -127,6 +127,18 @@ class SubscriptionRepository:
         ).all()
         return tuple(_subscription_from_model(row, telegram_user_id) for row in rows)
 
+    async def list_enabled(self) -> tuple[Subscription, ...]:
+        """Return active rules with their external owner ID for catalogue polling."""
+        rows = (
+            await self._session.execute(
+                select(SubscriptionModel, BuyerModel.telegram_user_id)
+                .join(BuyerModel)
+                .where(SubscriptionModel.enabled.is_(True))
+                .order_by(SubscriptionModel.theatre_alias, SubscriptionModel.id)
+            )
+        ).all()
+        return tuple(_subscription_from_model(model, user_id) for model, user_id in rows)
+
     async def set_enabled(
         self, *, subscription_id: str, telegram_user_id: str, enabled: bool
     ) -> bool:
