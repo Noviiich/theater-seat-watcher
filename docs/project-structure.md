@@ -9,6 +9,7 @@ CLI, контейнер и операции SQLite backup/restore.
 
 ```text
 theater_tickets/
+├── healthcheck.py                  # Лёгкая проверка live SQLite без runtime imports
 ├── AGENTS.md
 ├── README.md                       # Запуск и ссылки на docs
 ├── pyproject.toml
@@ -94,7 +95,7 @@ theater_tickets/
 │       ├── reconciliation.py
 │       └── outbox.py
 │   └── operations/
-│       └── database.py             # Migrate/health/smoke/SQLite backup/restore
+│       └── database.py             # Migrate/smoke/SQLite backup/restore
 ├── tests/
 │   ├── unit/
 │   ├── contract/

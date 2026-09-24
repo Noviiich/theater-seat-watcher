@@ -57,26 +57,6 @@ def smoke_database(
     return DatabaseSmokeResult(path, head)
 
 
-def health_database(
-    database_url: str,
-    *,
-    project_root: Path | None = None,
-) -> DatabaseSmokeResult:
-    """Check that the live database is readable and uses the current schema."""
-    path = sqlite_path(database_url)
-    if not path.is_file():
-        raise RuntimeError("database file does not exist; run migrations first")
-    with sqlite3.connect(f"file:{path}?mode=ro", uri=True, timeout=2.0) as connection:
-        connection.execute("PRAGMA query_only = ON")
-        revision_row = connection.execute("SELECT version_num FROM alembic_version").fetchone()
-    revision = revision_row[0] if revision_row else None
-    config = _alembic_config(path, project_root=project_root)
-    head = ScriptDirectory.from_config(config).get_current_head()
-    if revision != head or head is None:
-        raise RuntimeError("database schema is not at the application migration head")
-    return DatabaseSmokeResult(path, head)
-
-
 def backup_database(database_url: str, destination: Path) -> Path:
     """Create a consistent owner-only copy using SQLite's online backup API."""
     source = sqlite_path(database_url)

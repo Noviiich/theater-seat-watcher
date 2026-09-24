@@ -12,7 +12,6 @@ from pathlib import Path
 from theater_tickets.bootstrap import create_application
 from theater_tickets.operations.database import (
     backup_database,
-    health_database,
     migrate_database,
     restore_database,
     smoke_database,
@@ -38,10 +37,6 @@ def main(argv: Sequence[str] | None = None) -> int:
         if command == "smoke":
             result = smoke_database(database_url)
             print(f"dry-run smoke: ok; revision={result.revision}")
-            return 0
-        if command == "health":
-            result = health_database(database_url)
-            print(f"health: ok; revision={result.revision}")
             return 0
         if command == "backup":
             destination = backup_database(database_url, arguments.destination)
@@ -75,7 +70,6 @@ def _parser() -> argparse.ArgumentParser:
     subparsers.add_parser("diagnose", help="print non-secret configuration status")
     subparsers.add_parser("migrate", help="upgrade the configured SQLite database")
     subparsers.add_parser("smoke", help="check SQLite integrity and migration head")
-    subparsers.add_parser("health", help="check that live SQLite is readable and current")
     subparsers.add_parser("run", help="start the production dry-run runtime")
     backup = subparsers.add_parser("backup", help="create an online SQLite backup")
     backup.add_argument("destination", type=Path)

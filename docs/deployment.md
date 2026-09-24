@@ -105,7 +105,8 @@ GitHub Environment не должен требовать ручного одоб�
 ```bash
 cd /opt/theater-seat-watcher/current
 docker compose --project-name theater-tickets -f deploy/compose.yaml ps
-docker compose --project-name theater-tickets -f deploy/compose.yaml exec -T bot theater-tickets health
+docker compose --project-name theater-tickets -f deploy/compose.yaml exec -T bot \
+  python -m theater_tickets.healthcheck
 ```
 
 Если первый запуск контейнера дошёл до старта, но оборвался до создания
@@ -117,9 +118,10 @@ Compose, восстанавливает ссылку на его выпуск и
 Каждое обновление работающего бота сохраняет backup в volume
 `theater_tickets_backups` **до** удаления старого контейнера и загрузки нового
 образа. Выпуск считается успешным
-только после `docker compose up --wait` и `health`. Быстрый `health` проверяет
-чтение активной SQLite-базы и текущую ревизию схемы; полный `integrity_check`
-выполняется процессом `run` перед запуском workers. При ошибке Actions показывает
+только после `docker compose up --wait` и отдельного лёгкого healthcheck-модуля.
+Он загружает только стандартную библиотеку, проверяет чтение активной SQLite-базы
+и ожидаемую ревизию схемы. Полный `integrity_check` выполняется процессом `run`
+перед запуском workers. При ошибке Actions показывает
 провал; автоматическое восстановление БД не выполняется, поскольку после
 запуска нового кода могли появиться заказы. Сохранённый backup и предыдущие
 выпуски позволяют выполнить [ручное восстановление](operations.md#restore).

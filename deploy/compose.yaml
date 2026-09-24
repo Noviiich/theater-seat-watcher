@@ -21,7 +21,7 @@ services:
     security_opt:
       - no-new-privileges:true
     healthcheck:
-      test: ["CMD", "theater-tickets", "health"]
+      test: ["CMD", "python", "-m", "theater_tickets.healthcheck"]
       interval: 30s
       timeout: 10s
       retries: 3

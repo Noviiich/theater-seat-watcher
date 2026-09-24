@@ -111,7 +111,7 @@ fi
 
 echo "Starting release ${release_id%%-*}"
 "${compose[@]}" up -d --no-build --force-recreate --wait --wait-timeout 180 bot
-"${compose[@]}" exec -T bot theater-tickets health
+"${compose[@]}" exec -T bot python -m theater_tickets.healthcheck
 
 link="$root/.current-$release_id"
 ln -s "$release" "$link"
