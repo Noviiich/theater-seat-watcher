@@ -105,7 +105,10 @@ theater_tickets/
 │   └── inspect_quicktickets.py    # Явная диагностика чтения, без live POST
 ├── deploy/
 │   ├── Dockerfile
-│   └── compose.yaml
+│   ├── compose.yaml
+│   ├── deploy-release.sh
+│   ├── prepare-image-upload.sh
+│   └── bootstrap-ubuntu-debian.sh
 └── .github/workflows/ci.yml
 ```
 

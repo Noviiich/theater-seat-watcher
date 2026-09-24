@@ -11,6 +11,7 @@ root=/opt/theater-seat-watcher
 release="$root/releases/$release_id"
 current="$root/current"
 shared_env="$root/shared/.env"
+prepared="$root/shared/.image-upload-prepared"
 compose=(docker compose --project-name theater-tickets --file "$release/deploy/compose.yaml")
 
 if [[ ! -f "$shared_env" ]]; then
@@ -86,7 +87,9 @@ fi
 
 if [[ -L "$current" ]]; then
   previous="$(readlink -f "$current")"
-  if [[ -n "$(docker compose --project-name theater-tickets --file "$previous/deploy/compose.yaml" ps -q bot)" ]]; then
+  if [[ -f "$prepared" ]]; then
+    echo "Using database backup prepared before image upload: $(cat "$prepared")"
+  elif [[ -n "$(docker compose --project-name theater-tickets --file "$previous/deploy/compose.yaml" ps -q bot)" ]]; then
     backup_name="theater-tickets-$(date -u +%Y%m%dT%H%M%SZ)-${release_id}.sqlite3"
     echo "Creating database backup $backup_name"
     docker compose --project-name theater-tickets --file "$previous/deploy/compose.yaml" \
@@ -113,6 +116,7 @@ echo "Starting release ${release_id%%-*}"
 link="$root/.current-$release_id"
 ln -s "$release" "$link"
 mv -Tf "$link" "$current"
+rm -f "$prepared"
 echo "Deployment healthy: ${release_id%%-*}"
 
 # The smallest supported servers have little room for repeated Chromium builds.

@@ -114,6 +114,8 @@ jobs:
           tar -cf - config deploy | \
             ssh "${ssh_options[@]}" "$remote" \
               "tar -xf - -C /opt/theater-seat-watcher/releases/$release_id"
+          ssh "${ssh_options[@]}" "$remote" \
+            "bash /opt/theater-seat-watcher/releases/$release_id/deploy/prepare-image-upload.sh"
           echo "Uploading ready image $image"
           docker save "$image" | gzip -1 | \
             ssh "${ssh_options[@]}" "$remote" 'gzip -d | docker load'
