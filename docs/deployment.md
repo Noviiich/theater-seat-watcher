@@ -1,0 +1,117 @@
+# Автоматический деплой после push
+
+После однократной подготовки сервера и GitHub Environment каждый push в `main`
+запускает CI, передаёт новый выпуск на сервер, собирает образ, сохраняет backup
+SQLite, обновляет контейнер и проверяет его healthcheck. Deployment job начинает
+работу только после успешных Ruff, mypy и pytest. База и backup находятся в
+именованных Docker volumes; исходный код и конфигурация зала находятся в каталоге
+отдельного выпуска. Неотслеживаемые файлы рабочей машины на сервер не передаются.
+
+## 1. Сервер
+
+Поддерживаемый bootstrap: Ubuntu или Debian на машине с SSH и `systemd`. Для
+сборки образа с Chromium нужны достаточные диск и память. Порты приложения
+открывать не нужно: Telegram работает через исходящее соединение.
+
+Сгенерируйте **отдельную** пару SSH-ключей для деплоя на своей машине:
+
+```bash
+ssh-keygen -t ed25519 -f ~/.ssh/theater_tickets_deploy -N ''
+```
+
+Если ключ уже создан в локальном `.deploy-keys/theater_deploy`, используйте его
+вместо повторной генерации и подставьте путь к `.deploy-keys/theater_deploy.pub`
+в команду `scp` ниже. Каталог `.deploy-keys` исключён из Git.
+
+Приватный ключ не помещайте в Git, чат или логи. Передайте на сервер публичный
+ключ и `deploy/bootstrap-ubuntu-debian.sh`, затем один раз запустите скрипт от
+root. Например, для сервера с SSH-доступом через `admin@SERVER`:
+
+```bash
+scp deploy/bootstrap-ubuntu-debian.sh ~/.ssh/theater_tickets_deploy.pub admin@SERVER:/tmp/
+ssh admin@SERVER 'sudo bash /tmp/bootstrap-ubuntu-debian.sh theater-deploy /tmp/theater_tickets_deploy.pub'
+```
+
+Скрипт устанавливает Docker Engine и Compose из официального apt-репозитория,
+создаёт пользователя `theater-deploy`, добавляет его публичный ключ в
+`authorized_keys`, разрешает ему Docker и готовит
+`/opt/theater-seat-watcher/{releases,shared}`. Если Docker уже установлен,
+скрипт его не переустанавливает. После добавления пользователя в группу Docker
+откройте **новую** SSH-сессию и проверьте `docker compose version`.
+Членство в группе Docker даёт права уровня root; используйте отдельный ключ и
+пользователя только для деплоя. Установка Docker следует
+[официальным шагам для Ubuntu](https://docs.docker.com/engine/install/ubuntu/)
+или [Debian](https://docs.docker.com/engine/install/debian/).
+После проверки входа под `theater-deploy` удалите временно добавленный ключ из
+`root`-доступа через консоль сервера, сохранив остальные ключи root.
+
+## 2. GitHub Environment
+
+Создайте Environment `production` в Settings → Environments. Добавьте в него
+следующие Secrets через GitHub UI:
+
+| Secret | Значение |
+| --- | --- |
+| `DEPLOY_SSH_HOST` | Публичный DNS или IP сервера |
+| `DEPLOY_SSH_USER` | `theater-deploy` либо другое имя из bootstrap |
+| `DEPLOY_SSH_PORT` | SSH-порт; можно не задавать для порта 22 |
+| `DEPLOY_SSH_PRIVATE_KEY` | Приватная часть отдельного ключа деплоя, включая строки BEGIN/END |
+| `DEPLOY_SSH_KNOWN_HOSTS` | Проверенная запись SSH host key сервера для указанного адреса и порта |
+| `DEPLOY_ENV_FILE` | Полное содержимое серверного `.env`; необязательно, если файл уже установлен вручную |
+
+Host key сверяйте с отпечатком из консоли провайдера или с самого сервера.
+`ssh-keyscan -p 22 -t ed25519 SERVER` годится для получения строки, но сам по
+себе не подтверждает её подлинность. Для нестандартного порта запись `known_hosts` имеет вид
+`[host]:port тип-ключа ключ`. GitHub хранит secrets в настройках Actions;
+подробнее — [документация GitHub](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-secrets).
+
+`DEPLOY_ENV_FILE` избавляет от ручного копирования `.env` на сервер и
+перезаписывает `/opt/theater-seat-watcher/shared/.env` при каждом деплое.
+В нём обязательны `TELEGRAM_BOT_TOKEN` и `ADMIN_TELEGRAM_USER_ID`.
+Начните с `BOOKING_MODE=dry_run`; перевод в `live` требует отдельной проверки
+контракта, платёжного терминала и подтверждения подписки пользователем.
+Образец переменных — [`.env.example`](../.env.example). Если не используете
+`DEPLOY_ENV_FILE`, создайте `shared/.env` на сервере с правами `0600` до первого
+push. Ни база, ни `.env`, ни платёжные URL не входят в передаваемый архив.
+
+Если требуется сохранить существующие подписки, до первого запуска скопируйте
+SQLite backup, созданный командой `theater-tickets backup`, в
+`/opt/theater-seat-watcher/shared/theater_tickets_initial.sqlite3` с правами
+`0600` и владельцем `theater-deploy`. Первый выпуск проверит backup и
+восстановит его в `theater_tickets_data` до запуска бота. При повторном первом
+деплое существующая база не перезаписывается: ситуацию нужно проверить вручную.
+Не запускайте одновременно локальный и серверный экземпляры с одним
+Telegram-токеном.
+
+## 3. Запуск и наблюдение
+
+Запушьте коммит в `main`. В Actions → CI должны последовательно пройти `checks`
+и `deploy`. Если секреты ещё не заданы, `deploy` завершится ошибкой до SSH.
+GitHub Environment не должен требовать ручного одобрения, если нужен полностью
+автоматический запуск. Повторный запуск job создаёт отдельный выпуск.
+
+На сервере `current` указывает на последний выпуск, прошедший healthcheck.
+Для проверки состояния:
+
+```bash
+cd /opt/theater-seat-watcher/current
+docker compose --project-name theater-tickets -f deploy/compose.yaml ps
+docker compose --project-name theater-tickets -f deploy/compose.yaml exec -T bot theater-tickets smoke
+```
+
+Каждое обновление работающего бота сохраняет backup в volume
+`theater_tickets_backups` **до** замены контейнера. Выпуск считается успешным
+только после `docker compose up --wait` и `smoke`. При ошибке Actions показывает
+провал; автоматическое восстановление БД не выполняется, поскольку после
+запуска нового кода могли появиться заказы. Сохранённый backup и предыдущие
+выпуски позволяют выполнить [ручное восстановление](operations.md#restore).
+После успешного деплоя скрипт удаляет старые образы приложения и build cache,
+чтобы на небольшом диске оставалось место для следующей сборки. Каталоги старых
+выпусков и backup сохраняются. Для отката на старый выпуск его образ нужно
+собрать заново из сохранённого каталога; данные восстанавливают отдельно по
+[инструкции](operations.md#restore). Удаление старых backup выполняйте после
+проверки вручную.
+
+Важное ограничение: зелёный healthcheck проверяет контейнер и SQLite, но не
+доказывает успешное live-оформление в QuickTickets. Оно остаётся отдельным
+критерием [live-приёмки](live-acceptance.md).

@@ -11,12 +11,15 @@ RUN uv sync --frozen --no-dev --no-editable
 
 FROM python:3.12-slim AS runtime
 ENV PATH="/app/.venv/bin:$PATH" \
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
-RUN groupadd --gid 10001 theater-tickets \
-    && useradd --uid 10001 --gid 10001 --create-home theater-tickets
 WORKDIR /app
 COPY --from=builder /app/.venv ./.venv
+RUN playwright install --with-deps chromium \
+    && chmod -R a+rX /ms-playwright
+RUN groupadd --gid 10001 theater-tickets \
+    && useradd --uid 10001 --gid 10001 --create-home theater-tickets
 COPY alembic.ini ./
 COPY migrations ./migrations
 COPY config ./config

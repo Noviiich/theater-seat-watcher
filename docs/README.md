@@ -23,6 +23,7 @@ Dry-run развёртывание и production entrypoint завершены �
 | [seat-selection.md](seat-selection.md) | Соседство, пользовательские группы, оценка удобства |
 | [project-structure.md](project-structure.md) | Целевая структура Python-пакета и направление зависимостей |
 | [operations.md](operations.md) | Dry-run deployment, секреты, обновление, backup и restore |
+| [deployment.md](deployment.md) | Bootstrap сервера и автодеплой из GitHub |
 | [live-acceptance.md](live-acceptance.md) | Датированный preflight и критерии допуска к live-проверке |
 | [roadmap.md](roadmap.md) | Последовательность шагов под отдельные коммиты |
 | [../AGENTS.md](../AGENTS.md) | Инструкции для разработки |

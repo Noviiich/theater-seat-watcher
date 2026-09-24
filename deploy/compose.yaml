@@ -3,7 +3,7 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile
-    image: theater-tickets:local
+    image: ${THEATER_TICKETS_IMAGE:-theater-tickets:local}
     init: true
     restart: unless-stopped
     stop_grace_period: 45s

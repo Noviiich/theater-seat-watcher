@@ -20,3 +20,65 @@ jobs:
       - run: uv run ruff format --check .
       - run: uv run mypy src
       - run: uv run pytest
+
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: checks
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency:
+      group: theater-tickets-production
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate deployment settings
+        env:
+          DEPLOY_SSH_HOST: ${{ secrets.DEPLOY_SSH_HOST }}
+          DEPLOY_SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
+          DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          DEPLOY_SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
+        run: |
+          test -n "$DEPLOY_SSH_HOST"
+          test -n "$DEPLOY_SSH_USER"
+          test -n "$DEPLOY_SSH_PRIVATE_KEY"
+          test -n "$DEPLOY_SSH_KNOWN_HOSTS"
+      - name: Configure SSH
+        env:
+          DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
+          DEPLOY_SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
+        run: |
+          umask 077
+          mkdir -p "$HOME/.ssh"
+          printf '%s\n' "$DEPLOY_SSH_PRIVATE_KEY" > "$HOME/.ssh/deploy_key"
+          printf '%s\n' "$DEPLOY_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          ssh-keygen -y -f "$HOME/.ssh/deploy_key" > /dev/null
+      - name: Upload and deploy release
+        env:
+          DEPLOY_SSH_HOST: ${{ secrets.DEPLOY_SSH_HOST }}
+          DEPLOY_SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
+          DEPLOY_SSH_PORT: ${{ secrets.DEPLOY_SSH_PORT }}
+          DEPLOY_ENV_FILE: ${{ secrets.DEPLOY_ENV_FILE }}
+        run: |
+          set -euo pipefail
+          latest_main="$(git ls-remote origin refs/heads/main | cut -f1)"
+          if [[ "$latest_main" != "$GITHUB_SHA" ]]; then
+            echo "A newer main commit exists; skipping this release"
+            exit 0
+          fi
+          port="${DEPLOY_SSH_PORT:-22}"
+          [[ "$port" =~ ^[0-9]{1,5}$ ]]
+          release_id="${GITHUB_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          remote="${DEPLOY_SSH_USER}@${DEPLOY_SSH_HOST}"
+          ssh_options=(-i "$HOME/.ssh/deploy_key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -o ServerAliveInterval=20 -p "$port")
+          ssh "${ssh_options[@]}" "$remote" \
+            "mkdir -p /opt/theater-seat-watcher/releases/$release_id /opt/theater-seat-watcher/shared"
+          if [[ -n "$DEPLOY_ENV_FILE" ]]; then
+            printf '%s\n' "$DEPLOY_ENV_FILE" | \
+              ssh "${ssh_options[@]}" "$remote" \
+                'umask 077; cat > /opt/theater-seat-watcher/shared/.env.tmp && mv /opt/theater-seat-watcher/shared/.env.tmp /opt/theater-seat-watcher/shared/.env'
+          fi
+          tar -cf - .dockerignore pyproject.toml uv.lock README.md alembic.ini src migrations config deploy | \
+            ssh "${ssh_options[@]}" "$remote" \
+              "tar -xf - -C /opt/theater-seat-watcher/releases/$release_id"
+          ssh "${ssh_options[@]}" "$remote" \
+            "bash /opt/theater-seat-watcher/releases/$release_id/deploy/deploy-release.sh $release_id"
