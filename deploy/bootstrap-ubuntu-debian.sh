@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive
 
 if (( EUID != 0 )); then
   echo "Run as root on the server" >&2
@@ -17,6 +18,10 @@ fi
 source /etc/os-release
 if [[ "$ID" != ubuntu && "$ID" != debian ]]; then
   echo "Only Ubuntu and Debian are supported by this bootstrap script" >&2
+  exit 2
+fi
+if [[ "$(dpkg --print-architecture)" != amd64 ]]; then
+  echo "Only amd64 servers are supported by the prebuilt image" >&2
   exit 2
 fi
 

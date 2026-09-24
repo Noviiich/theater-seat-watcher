@@ -11,12 +11,12 @@
 
 ## 1. Сервер
 
-Поддерживаемый bootstrap: Ubuntu или Debian x86-64 на машине с SSH и `systemd`.
-На сервере нужны место для готового образа и Docker volumes; компиляторы и
-ресурсы для сборки Chromium не требуются. Порты приложения открывать не нужно:
-Telegram работает через исходящее соединение.
+Поддерживаемый bootstrap: чистый Ubuntu или Debian x86-64 с SSH и `systemd`.
+Указанный в GitHub пользователь должен быть `root` или иметь беспарольный
+`sudo`; это необходимо для первой установки Docker. Порты приложения открывать
+не нужно: Telegram работает через исходящее соединение.
 
-Сгенерируйте **отдельную** пару SSH-ключей для деплоя на своей машине:
+Сгенерируйте **отдельную** пару SSH-ключей для деплоя:
 
 ```bash
 ssh-keygen -t ed25519 -f ~/.ssh/theater_tickets_deploy -N ''
@@ -26,27 +26,25 @@ ssh-keygen -t ed25519 -f ~/.ssh/theater_tickets_deploy -N ''
 вместо повторной генерации и подставьте путь к `.deploy-keys/theater_deploy.pub`
 в команду `scp` ниже. Каталог `.deploy-keys` исключён из Git.
 
-Приватный ключ не помещайте в Git, чат или логи. Передайте на сервер публичный
-ключ и `deploy/bootstrap-ubuntu-debian.sh`, затем один раз запустите скрипт от
-root. Например, для сервера с SSH-доступом через `admin@SERVER`:
+До первого push добавьте публичный ключ пользователю, указанному в
+`DEPLOY_SSH_USER`. Это единственное действие на голом сервере. Приватный ключ
+поместите только в GitHub Secret, не в Git, чат или логи.
 
-```bash
-scp deploy/bootstrap-ubuntu-debian.sh ~/.ssh/theater_tickets_deploy.pub admin@SERVER:/tmp/
-ssh admin@SERVER 'sudo bash /tmp/bootstrap-ubuntu-debian.sh theater-deploy /tmp/theater_tickets_deploy.pub'
-```
+При каждом deploy job workflow автоматически передаёт и запускает
+`deploy/bootstrap-ubuntu-debian.sh` через `root` или `sudo -n`. Скрипт:
 
-Скрипт устанавливает Docker Engine и Compose из официального apt-репозитория,
-создаёт пользователя `theater-deploy`, добавляет его публичный ключ в
-`authorized_keys`, разрешает ему Docker и готовит
-`/opt/theater-seat-watcher/{releases,shared}`. Если Docker уже установлен,
-скрипт его не переустанавливает. После добавления пользователя в группу Docker
-откройте **новую** SSH-сессию и проверьте `docker compose version`.
-Членство в группе Docker даёт права уровня root; используйте отдельный ключ и
-пользователя только для деплоя. Установка Docker следует
+- устанавливает Docker Engine, Buildx и Compose из официального apt-репозитория;
+- добавляет `DEPLOY_SSH_USER` в группу `docker`;
+- восстанавливает каталоги `/opt/theater-seat-watcher/{releases,shared}` и их
+  владельца, даже если каталоги были удалены или созданы от `root`;
+- повторно добавляет тот же публичный ключ без дубликатов.
+
+Bootstrap идемпотентен: на подготовленном сервере он только проверяет и
+восстанавливает состояние. Членство в группе Docker даёт права уровня root,
+поэтому используйте отдельный ключ и пользователя только для деплоя. Установка
+Docker следует
 [официальным шагам для Ubuntu](https://docs.docker.com/engine/install/ubuntu/)
 или [Debian](https://docs.docker.com/engine/install/debian/).
-После проверки входа под `theater-deploy` удалите временно добавленный ключ из
-`root`-доступа через консоль сервера, сохранив остальные ключи root.
 
 ## 2. GitHub Environment
 
@@ -56,11 +54,11 @@ ssh admin@SERVER 'sudo bash /tmp/bootstrap-ubuntu-debian.sh theater-deploy /tmp/
 | Secret | Значение |
 | --- | --- |
 | `DEPLOY_SSH_HOST` | Публичный DNS или IP сервера |
-| `DEPLOY_SSH_USER` | `theater-deploy` либо другое имя из bootstrap |
+| `DEPLOY_SSH_USER` | SSH-пользователь: `root` или пользователь с беспарольным `sudo` |
 | `DEPLOY_SSH_PORT` | SSH-порт; можно не задавать для порта 22 |
 | `DEPLOY_SSH_PRIVATE_KEY` | Приватная часть отдельного ключа деплоя, включая строки BEGIN/END |
 | `DEPLOY_SSH_KNOWN_HOSTS` | Проверенная запись SSH host key сервера для указанного адреса и порта |
-| `DEPLOY_ENV_FILE` | Полное содержимое серверного `.env`; необязательно, если файл уже установлен вручную |
+| `DEPLOY_ENV_FILE` | Полное содержимое серверного `.env`; обязательно для bootstrap голого сервера |
 
 Host key сверяйте с отпечатком из консоли провайдера или с самого сервера.
 `ssh-keyscan -p 22 -t ed25519 SERVER` годится для получения строки, но сам по
@@ -68,14 +66,13 @@ Host key сверяйте с отпечатком из консоли прова
 `[host]:port тип-ключа ключ`. GitHub хранит secrets в настройках Actions;
 подробнее — [документация GitHub](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-secrets).
 
-`DEPLOY_ENV_FILE` избавляет от ручного копирования `.env` на сервер и
-перезаписывает `/opt/theater-seat-watcher/shared/.env` при каждом деплое.
+`DEPLOY_ENV_FILE` создаёт `/opt/theater-seat-watcher/shared/.env` на голом
+сервере и атомарно перезаписывает его при каждом деплое.
 В нём обязательны `TELEGRAM_BOT_TOKEN` и `ADMIN_TELEGRAM_USER_ID`.
 Начните с `BOOKING_MODE=dry_run`; перевод в `live` требует отдельной проверки
 контракта, платёжного терминала и подтверждения подписки пользователем.
-Образец переменных — [`.env.example`](../.env.example). Если не используете
-`DEPLOY_ENV_FILE`, создайте `shared/.env` на сервере с правами `0600` до первого
-push. Ни база, ни `.env`, ни платёжные URL не входят в передаваемый архив.
+Образец переменных — [`.env.example`](../.env.example). Ни база, ни `.env`, ни
+платёжные URL не входят в Git или передаваемый архив исходников.
 Готовый образ передаётся потоково через `docker save | gzip | ssh | docker load`,
 поэтому промежуточный архив образа на диске сервера не создаётся. Скрипт перед
 запуском проверяет архитектуру образа и встроенную метку commit SHA.

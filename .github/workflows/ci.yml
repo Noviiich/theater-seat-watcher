@@ -37,11 +37,13 @@ jobs:
           DEPLOY_SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
           DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
           DEPLOY_SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_SSH_KNOWN_HOSTS }}
+          DEPLOY_ENV_FILE: ${{ secrets.DEPLOY_ENV_FILE }}
         run: |
           test -n "$DEPLOY_SSH_HOST"
           test -n "$DEPLOY_SSH_USER"
           test -n "$DEPLOY_SSH_PRIVATE_KEY"
           test -n "$DEPLOY_SSH_KNOWN_HOSTS"
+          test -n "$DEPLOY_ENV_FILE"
       - name: Configure SSH
         env:
           DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.DEPLOY_SSH_PRIVATE_KEY }}
@@ -52,6 +54,27 @@ jobs:
           printf '%s\n' "$DEPLOY_SSH_PRIVATE_KEY" > "$HOME/.ssh/deploy_key"
           printf '%s\n' "$DEPLOY_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
           ssh-keygen -y -f "$HOME/.ssh/deploy_key" > /dev/null
+          ssh-keygen -y -f "$HOME/.ssh/deploy_key" > "$HOME/.ssh/deploy_key.pub"
+      - name: Bootstrap bare server
+        env:
+          DEPLOY_SSH_HOST: ${{ secrets.DEPLOY_SSH_HOST }}
+          DEPLOY_SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
+          DEPLOY_SSH_PORT: ${{ secrets.DEPLOY_SSH_PORT }}
+        run: |
+          set -euo pipefail
+          port="${DEPLOY_SSH_PORT:-22}"
+          [[ "$port" =~ ^[0-9]{1,5}$ ]]
+          [[ "$DEPLOY_SSH_USER" =~ ^[a-z_][a-z0-9_-]*$ ]]
+          remote="${DEPLOY_SSH_USER}@${DEPLOY_SSH_HOST}"
+          ssh_options=(-i "$HOME/.ssh/deploy_key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -o ServerAliveInterval=20 -o ServerAliveCountMax=60 -p "$port")
+          bootstrap_script="/tmp/theater-seat-watcher-bootstrap-${GITHUB_RUN_ID}.sh"
+          public_key="/tmp/theater-seat-watcher-deploy-${GITHUB_RUN_ID}.pub"
+          ssh "${ssh_options[@]}" "$remote" \
+            "umask 077; cat > $bootstrap_script" < deploy/bootstrap-ubuntu-debian.sh
+          ssh "${ssh_options[@]}" "$remote" \
+            "umask 077; cat > $public_key" < "$HOME/.ssh/deploy_key.pub"
+          ssh "${ssh_options[@]}" "$remote" \
+            "set -eu; trap 'rm -f $bootstrap_script $public_key' EXIT; if [ \"\$(id -u)\" -eq 0 ]; then bash $bootstrap_script '$DEPLOY_SSH_USER' $public_key; else sudo -n bash $bootstrap_script '$DEPLOY_SSH_USER' $public_key; fi"
       - name: Build executable image
         run: |
           set -euo pipefail
@@ -76,6 +99,7 @@ jobs:
           fi
           port="${DEPLOY_SSH_PORT:-22}"
           [[ "$port" =~ ^[0-9]{1,5}$ ]]
+          [[ "$DEPLOY_SSH_USER" =~ ^[a-z_][a-z0-9_-]*$ ]]
           release_id="${GITHUB_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           remote="${DEPLOY_SSH_USER}@${DEPLOY_SSH_HOST}"
           image="theater-tickets:$GITHUB_SHA"
