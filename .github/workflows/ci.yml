@@ -52,6 +52,15 @@ jobs:
           printf '%s\n' "$DEPLOY_SSH_PRIVATE_KEY" > "$HOME/.ssh/deploy_key"
           printf '%s\n' "$DEPLOY_SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
           ssh-keygen -y -f "$HOME/.ssh/deploy_key" > /dev/null
+      - name: Build executable image
+        run: |
+          set -euo pipefail
+          image="theater-tickets:$GITHUB_SHA"
+          docker build --platform linux/amd64 --tag "$image" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --file deploy/Dockerfile .
+          test "$(docker image inspect "$image" --format '{{.Architecture}}')" = amd64
+          docker run --rm "$image" diagnose
       - name: Upload and deploy release
         env:
           DEPLOY_SSH_HOST: ${{ secrets.DEPLOY_SSH_HOST }}
@@ -69,7 +78,8 @@ jobs:
           [[ "$port" =~ ^[0-9]{1,5}$ ]]
           release_id="${GITHUB_SHA}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           remote="${DEPLOY_SSH_USER}@${DEPLOY_SSH_HOST}"
-          ssh_options=(-i "$HOME/.ssh/deploy_key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -o ServerAliveInterval=20 -p "$port")
+          image="theater-tickets:$GITHUB_SHA"
+          ssh_options=(-i "$HOME/.ssh/deploy_key" -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -o ServerAliveInterval=20 -o ServerAliveCountMax=30 -p "$port")
           ssh "${ssh_options[@]}" "$remote" \
             "mkdir -p /opt/theater-seat-watcher/releases/$release_id /opt/theater-seat-watcher/shared"
           if [[ -n "$DEPLOY_ENV_FILE" ]]; then
@@ -77,8 +87,11 @@ jobs:
               ssh "${ssh_options[@]}" "$remote" \
                 'umask 077; cat > /opt/theater-seat-watcher/shared/.env.tmp && mv /opt/theater-seat-watcher/shared/.env.tmp /opt/theater-seat-watcher/shared/.env'
           fi
-          tar -cf - .dockerignore pyproject.toml uv.lock README.md alembic.ini src migrations config deploy | \
+          tar -cf - config deploy | \
             ssh "${ssh_options[@]}" "$remote" \
               "tar -xf - -C /opt/theater-seat-watcher/releases/$release_id"
+          echo "Uploading ready image $image"
+          docker save "$image" | gzip -1 | \
+            ssh "${ssh_options[@]}" "$remote" 'gzip -d | docker load'
           ssh "${ssh_options[@]}" "$remote" \
             "bash /opt/theater-seat-watcher/releases/$release_id/deploy/deploy-release.sh $release_id"

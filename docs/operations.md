@@ -55,7 +55,7 @@ Hall profile не содержит ПДн и может версионирова
 ## Первый dry-run запуск
 
 ```bash
-docker compose -f deploy/compose.yaml build
+docker build --platform linux/amd64 -t theater-tickets:local -f deploy/Dockerfile .
 docker compose -f deploy/compose.yaml up -d
 docker compose -f deploy/compose.yaml ps
 docker compose -f deploy/compose.yaml exec bot theater-tickets smoke
@@ -91,7 +91,8 @@ POST и ссылки оплаты. `/status` показывает свежест
 push в `main`; следующие команды остаются для ручного восстановления.
 
 1. Проверить `/status` и создать backup.
-2. Получить новую версию и выполнить `docker compose -f deploy/compose.yaml build`.
+2. Получить готовый образ из CI или локально выполнить
+   `docker build --platform linux/amd64 -t theater-tickets:local -f deploy/Dockerfile .`.
 3. Выполнить `docker compose -f deploy/compose.yaml up -d --no-deps bot`.
 4. Проверить `ps`, `logs` и `theater-tickets smoke`.
 

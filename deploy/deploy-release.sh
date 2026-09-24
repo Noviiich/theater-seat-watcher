@@ -17,7 +17,7 @@ if [[ ! -f "$shared_env" ]]; then
   echo "Server configuration is missing: $shared_env" >&2
   exit 2
 fi
-if [[ ! -f "$release/uv.lock" || ! -f "$release/deploy/compose.yaml" ]]; then
+if [[ ! -f "$release/deploy/compose.yaml" || ! -d "$release/config/halls" ]]; then
   echo "Release files are incomplete" >&2
   exit 2
 fi
@@ -43,8 +43,18 @@ else
 fi
 export THEATER_TICKETS_IMAGE="theater-tickets:${release_id%%-*}"
 
-echo "Building release ${release_id%%-*}"
-"${compose[@]}" build bot
+if ! docker image inspect "$THEATER_TICKETS_IMAGE" >/dev/null 2>&1; then
+  echo "Ready image is missing: $THEATER_TICKETS_IMAGE" >&2
+  exit 2
+fi
+if [[ "$(docker image inspect "$THEATER_TICKETS_IMAGE" --format '{{.Architecture}}')" != amd64 ]]; then
+  echo "Ready image has an unsupported architecture" >&2
+  exit 2
+fi
+if [[ "$(docker image inspect "$THEATER_TICKETS_IMAGE" --format '{{index .Config.Labels "org.opencontainers.image.revision"}}')" != "${release_id%%-*}" ]]; then
+  echo "Ready image revision does not match the release" >&2
+  exit 2
+fi
 
 if [[ -L "$current" ]]; then
   previous="$(readlink -f "$current")"
@@ -83,4 +93,3 @@ while IFS= read -r image; do
     docker image rm "$image" >/dev/null || echo "Could not remove old image: $image" >&2
   fi
 done < <(docker image ls --format '{{.Repository}}:{{.Tag}}' --filter 'reference=theater-tickets:*')
-docker builder prune --all --force >/dev/null || echo "Could not prune Docker build cache" >&2

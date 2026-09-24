@@ -1,8 +1,5 @@
 services:
   bot:
-    build:
-      context: ..
-      dockerfile: deploy/Dockerfile
     image: ${THEATER_TICKETS_IMAGE:-theater-tickets:local}
     init: true
     restart: unless-stopped
