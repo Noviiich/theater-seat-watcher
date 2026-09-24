@@ -25,9 +25,37 @@ if ! command -v docker >/dev/null || ! docker compose version >/dev/null; then
   echo "Docker and the Compose plugin are required" >&2
   exit 2
 fi
-if [[ ! -L "$current" ]] && [[ -n "$(docker ps -q --filter label=com.docker.compose.project=theater-tickets)" ]]; then
-  echo "Existing theater-tickets containers have no managed release; stop for manual review" >&2
+if [[ -e "$current" && ! -L "$current" ]]; then
+  echo "$current exists and is not a symbolic link" >&2
   exit 2
+fi
+if [[ ! -L "$current" ]]; then
+  mapfile -t existing_bots < <(
+    docker ps -q \
+      --filter label=com.docker.compose.project=theater-tickets \
+      --filter label=com.docker.compose.service=bot
+  )
+  if (( ${#existing_bots[@]} > 1 )); then
+    echo "Several running bot containers have no managed release; stop for manual review" >&2
+    exit 2
+  fi
+  if (( ${#existing_bots[@]} == 1 )); then
+    recovered_config="$({
+      docker inspect "${existing_bots[0]}" \
+        --format '{{index .Config.Labels "com.docker.compose.project.config_files"}}'
+    } 2>/dev/null)"
+    recovered_release="$(dirname "$(dirname "$recovered_config")")"
+    if [[ "$recovered_release" != "$root"/releases/* ]] || \
+      [[ "$recovered_config" != "$recovered_release/deploy/compose.yaml" ]] || \
+      [[ ! -f "$recovered_config" ]]; then
+      echo "Running bot does not belong to a release under $root/releases" >&2
+      exit 2
+    fi
+    recovery_link="$root/.current-recovered-$$"
+    ln -s "$recovered_release" "$recovery_link"
+    mv -Tf "$recovery_link" "$current"
+    echo "Recovered managed release $(basename "$recovered_release")"
+  fi
 fi
 
 if [[ -L "$release/.env" ]]; then
@@ -80,7 +108,7 @@ fi
 
 echo "Starting release ${release_id%%-*}"
 "${compose[@]}" up -d --no-build --force-recreate --wait --wait-timeout 180 bot
-"${compose[@]}" exec -T bot theater-tickets smoke
+"${compose[@]}" exec -T bot theater-tickets health
 
 link="$root/.current-$release_id"
 ln -s "$release" "$link"

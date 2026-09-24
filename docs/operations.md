@@ -61,10 +61,13 @@ docker compose -f deploy/compose.yaml ps
 docker compose -f deploy/compose.yaml exec bot theater-tickets smoke
 ```
 
-`run` перед стартом сам выполняет Alembic upgrade и проверяет integrity/schema
-head. Healthcheck выполняет только read-only `smoke`, без запросов QuickTickets и
-Telegram. Логи можно смотреть командой `docker compose -f deploy/compose.yaml logs -f bot`;
-они структурированы и не должны содержать токены, контакты или payment URL.
+`run` перед стартом сам выполняет Alembic upgrade и полный `integrity_check`
+вместе с проверкой schema head. Периодический healthcheck использует отдельную
+быструю read-only команду `health`: читает только ревизию схемы и не блокирует
+рабочую WAL-базу длительным сканированием. Обе проверки работают без запросов
+QuickTickets и Telegram. Логи можно смотреть командой
+`docker compose -f deploy/compose.yaml logs -f bot`; они структурированы и не
+должны содержать токены, контакты или payment URL.
 
 Первый полный снимок каждой подписки становится baseline и не создаёт старые
 заказы. После появления нового сеанса dry-run сохраняет решение без allocation,

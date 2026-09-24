@@ -94,7 +94,7 @@ theater_tickets/
 │       ├── reconciliation.py
 │       └── outbox.py
 │   └── operations/
-│       └── database.py             # Migrate/smoke/SQLite backup/restore
+│       └── database.py             # Migrate/health/smoke/SQLite backup/restore
 ├── tests/
 │   ├── unit/
 │   ├── contract/

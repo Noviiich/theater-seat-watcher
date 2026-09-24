@@ -23,6 +23,7 @@ from theater_tickets.adapters.persistence.models import (
 )
 from theater_tickets.operations.database import (
     backup_database,
+    health_database,
     migrate_database,
     restore_database,
     smoke_database,
@@ -168,6 +169,7 @@ def test_online_backup_restore_preserves_dedup_and_budget_keys(tmp_path: Path) -
     database_url = f"sqlite+aiosqlite:///{database_path}"
     migrate_database(database_url)
     asyncio.run(seed_and_restart(database_url))
+    assert health_database(database_url).revision == "0014_telegram_per_session_limits"
     assert smoke_database(database_url).revision == "0014_telegram_per_session_limits"
 
     backup_path = tmp_path / "backups" / "backup.sqlite3"

@@ -21,7 +21,7 @@ services:
     security_opt:
       - no-new-privileges:true
     healthcheck:
-      test: ["CMD", "theater-tickets", "smoke"]
+      test: ["CMD", "theater-tickets", "health"]
       interval: 30s
       timeout: 10s
       retries: 3

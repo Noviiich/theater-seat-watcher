@@ -99,12 +99,20 @@ GitHub Environment не должен требовать ручного одоб�
 ```bash
 cd /opt/theater-seat-watcher/current
 docker compose --project-name theater-tickets -f deploy/compose.yaml ps
-docker compose --project-name theater-tickets -f deploy/compose.yaml exec -T bot theater-tickets smoke
+docker compose --project-name theater-tickets -f deploy/compose.yaml exec -T bot theater-tickets health
 ```
+
+Если первый запуск контейнера дошёл до старта, но оборвался до создания
+`current`, следующий deploy распознает единственный работающий `bot` по меткам
+Compose, восстанавливает ссылку на его выпуск и делает обычный backup перед
+заменой. Контейнер с неожиданным путём выпуска или несколько контейнеров требуют
+ручной проверки.
 
 Каждое обновление работающего бота сохраняет backup в volume
 `theater_tickets_backups` **до** замены контейнера. Выпуск считается успешным
-только после `docker compose up --wait` и `smoke`. При ошибке Actions показывает
+только после `docker compose up --wait` и `health`. Быстрый `health` проверяет
+чтение активной SQLite-базы и текущую ревизию схемы; полный `integrity_check`
+выполняется процессом `run` перед запуском workers. При ошибке Actions показывает
 провал; автоматическое восстановление БД не выполняется, поскольку после
 запуска нового кода могли появиться заказы. Сохранённый backup и предыдущие
 выпуски позволяют выполнить [ручное восстановление](operations.md#restore).
@@ -115,6 +123,6 @@ docker compose --project-name theater-tickets -f deploy/compose.yaml exec -T bot
 [инструкции](operations.md#restore). Удаление старых backup выполняйте после
 проверки вручную.
 
-Важное ограничение: зелёный healthcheck проверяет контейнер и SQLite, но не
-доказывает успешное live-оформление в QuickTickets. Оно остаётся отдельным
-критерием [live-приёмки](live-acceptance.md).
+Важное ограничение: зелёный healthcheck проверяет контейнер, чтение SQLite и
+ревизию схемы, но не доказывает успешное live-оформление в QuickTickets. Оно
+остаётся отдельным критерием [live-приёмки](live-acceptance.md).
