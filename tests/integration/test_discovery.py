@@ -54,14 +54,12 @@ def test_discovery_uses_per_subscription_durable_baseline(tmp_path: Path) -> Non
                         id="buyer",
                         telegram_user_id="1",
                         telegram_chat_id="1",
-                        profile_ref=None,
                         created_at=now,
                     ),
                     BuyerModel(
                         id="overlapping-buyer",
                         telegram_user_id="2",
                         telegram_chat_id="2",
-                        profile_ref=None,
                         created_at=now,
                     ),
                     SubscriptionModel(

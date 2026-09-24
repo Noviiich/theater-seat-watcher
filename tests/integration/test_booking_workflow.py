@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -39,12 +39,12 @@ from theater_tickets.adapters.persistence.reconciliation import (
 from theater_tickets.adapters.persistence.renewals import SqlAlchemyRenewalRepository
 from theater_tickets.adapters.persistence.repositories import SubscriptionRepository
 from theater_tickets.adapters.persistence.unit_of_work import SqlAlchemyUnitOfWork
+from theater_tickets.adapters.telegram.routers.subscriptions import _new_button_subscription
 from theater_tickets.application.booking import (
     CandidateEvaluator,
     SeatSelectionConfiguration,
 )
 from theater_tickets.application.checkout import (
-    CheckoutBuyer,
     CheckoutErrorCode,
     CheckoutRequest,
     CheckoutResult,
@@ -110,6 +110,11 @@ class StaticProfiles:
 
     def load(self, profile_id: str) -> SeatSelectionConfiguration:
         if profile_id != self._value.profile.profile_id:
+            raise LookupError("profile missing")
+        return self._value
+
+    def find_matching(self, inventory: tuple[Seat, ...]) -> SeatSelectionConfiguration:
+        if not self._value.profile.matches_inventory(inventory):
             raise LookupError("profile missing")
         return self._value
 
@@ -233,6 +238,75 @@ def test_baseline_multiple_sessions_renewal_and_stop_are_end_to_end(tmp_path: Pa
                 select(CandidateModel).where(CandidateModel.id != stopped_id)
             )
             assert other is not None and other.current_cycle_no == 2
+        await engine.dispose()
+
+    asyncio.run(scenario())
+
+
+def test_telegram_limits_apply_separately_to_every_new_session(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        now = datetime(2026, 9, 20, 9, tzinfo=UTC)
+        factory, engine = await _database(tmp_path / "telegram-multiple.sqlite")
+        subscription = replace(
+            _new_button_subscription(
+                2,
+                "10",
+                live=True,
+                max_ticket_price=Money.from_rubles("5000"),
+                max_order_total=Money.from_rubles("15000"),
+            ),
+            subscription_id="subscription",
+            theatre_alias="theatre",
+            seat_profile_id="profile",
+        )
+        await _persist_subscription(factory, subscription)
+        provider = FakeProvider()
+        baseline = _session("base", now + timedelta(days=4))
+        new_sessions = tuple(
+            _session(f"new-{index}", now + timedelta(days=5 + index)) for index in range(3)
+        )
+        _configure(provider, (baseline, *new_sessions), _seats())
+        clock = FakeClock(now)
+        checkout = FakeCheckout(clock)
+        telegram = FakeTelegram()
+        workflow = _workflow(factory, provider, checkout, telegram, clock)
+
+        await workflow.process_snapshot(
+            subscription=subscription,
+            sessions=(baseline,),
+            fetched_at=now,
+            fingerprint="baseline",
+            complete=True,
+        )
+        outcome = await workflow.process_snapshot(
+            subscription=subscription,
+            sessions=(baseline, *new_sessions),
+            fetched_at=now + timedelta(minutes=1),
+            fingerprint="three-new-sessions",
+            complete=True,
+        )
+
+        assert len(outcome.discovered_candidates) == 3
+        assert outcome.live_processed == 3
+        assert len(checkout.calls) == 3
+        assert {call.session_key.session_id for call in checkout.calls} == {
+            "new-0",
+            "new-1",
+            "new-2",
+        }
+        assert all(len(call.seat_ids) == 2 for call in checkout.calls)
+        assert all(call.expected_total <= subscription.max_order_total for call in checkout.calls)
+        assert len([item for item in telegram.sent if item.payment_url is not None]) == 3
+        async with factory() as database:
+            assert await database.scalar(select(func.count()).select_from(OrderModel)) == 3
+            assert (
+                await database.scalar(
+                    select(func.count())
+                    .select_from(BudgetAllocationModel)
+                    .where(BudgetAllocationModel.active.is_(True))
+                )
+                == 3
+            )
         await engine.dispose()
 
     asyncio.run(scenario())
@@ -481,22 +555,9 @@ def test_restart_before_checkout_resumes_same_intent_once(tmp_path: Path) -> Non
         checkout = FakeCheckout(clock)
         repository = SqlAlchemyBookingRepository(factory)
 
-        def buyer_loader(_: str) -> CheckoutBuyer:
-            return CheckoutBuyer(
-                "Иванов",
-                "Иван",
-                "Иванович",
-                "buyer@example.test",
-                "+70000000000",
-                True,
-            )
-
         resume = CheckoutResumeWorker(
             repository=repository,
-            request_loader=SqlAlchemyRecoveryRequestLoader(
-                factory,
-                buyer_loader=buyer_loader,
-            ),
+            request_loader=SqlAlchemyRecoveryRequestLoader(factory),
             checkout=checkout,
             order_writer=SqlAlchemyOrderOutboxWriter(factory),
             failures=repository,
@@ -534,14 +595,6 @@ def _workflow(
         checkout=checkout,
         order_writer=SqlAlchemyOrderOutboxWriter(factory),
         failures=repository,
-        buyer_loader=lambda _: CheckoutBuyer(
-            "Иванов",
-            "Иван",
-            "Иванович",
-            "buyer@example.test",
-            "+70000000000",
-            True,
-        ),
         now=lambda: clock.now,
     )
     renewal = RenewalWorker(
@@ -552,7 +605,6 @@ def _workflow(
     outbox = OutboxWorker(
         repository=SqlAlchemyOutboxRepository(factory),
         transport=telegram,
-        allowed_user_ids=frozenset({"10"}),
     )
     return BookingWorkflow(
         session_factory=factory,
@@ -659,7 +711,12 @@ async def _persist_subscription(
         await uow.session.flush()
         buyer = await uow.session.scalar(select(BuyerModel))
         assert buyer is not None
-        buyer.profile_ref = "buyer-profile.json"
+        buyer.lastname = "Иванов"
+        buyer.firstname = "Иван"
+        buyer.middlename = "Иванович"
+        buyer.email = "buyer@example.test"
+        buyer.phone = "+70000000000"
+        buyer.personal_data_consent = True
 
 
 async def _seed_live_candidate(factory: async_sessionmaker[AsyncSession], now: datetime) -> None:

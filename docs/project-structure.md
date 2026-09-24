@@ -66,7 +66,8 @@ theater_tickets/
 │   │   │   ├── inventory.py        # Схема + занятость + capabilities
 │   │   │   ├── provider.py         # Catalogue + fresh session/inventory reads
 │   │   │   ├── dto.py              # Внешние форматы и validation
-│   │   │   ├── checkout.py         # Проверенная цепочка оформления
+│   │   │   ├── checkout.py         # Валидация и оркестрация этапов оформления
+│   │   │   ├── browser.py          # Изолированный Playwright checkout по HAR-контракту
 │   │   │   ├── reconciliation.py   # found/not-found/unknown/unsupported
 │   │   │   └── browser.py          # Опционально по результату исследования
 │   │   ├── telegram/
@@ -112,7 +113,7 @@ theater_tickets/
 `bootstrap` знает конкретные адаптеры и передаёт их в сценарии. Код алгоритма
 работает с переданными данными и не читает YAML, HTTP или SQLite самостоятельно.
 
-Данные эксплуатации (`.env`, SQLite/WAL, cookie jar, storage_state, профиль
+Данные эксплуатации (`.env`, SQLite/WAL, cookie jar, storage_state, данные профиля
 покупателя, приватные трассировки и backups) находятся вне отслеживаемого дерева
 либо в игнорируемом каталоге с ограниченными правами. Профили предпочтений зала
 можно версионировать; платёжные ссылки и пользовательские заказы — нельзя.

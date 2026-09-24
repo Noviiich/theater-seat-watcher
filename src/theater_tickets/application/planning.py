@@ -124,6 +124,7 @@ class BookingPlanner:
         )
         if (
             candidate_has_batch_slot is None
+            and subscription.max_sessions_per_batch is not None
             and batch_sessions >= subscription.max_sessions_per_batch
         ):
             candidate.tracking_state = "skipped_limit"
@@ -131,7 +132,10 @@ class BookingPlanner:
             return PlanningOutcome(PlanningState.SKIPPED_LIMIT, candidate_id)
 
         active_count, active_total = await self._active_buyer_usage(database, candidate.buyer_id)
-        if active_count >= subscription.max_active_orders or (
+        if (
+            subscription.max_active_orders is not None
+            and active_count >= subscription.max_active_orders
+        ) or (
             subscription.max_active_total is not None
             and active_total + reserved_total.minor_units
             > subscription.max_active_total.minor_units

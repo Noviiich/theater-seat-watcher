@@ -150,3 +150,59 @@ def topology_fingerprint(seats: tuple[Seat, ...]) -> str:
         separators=(",", ":"),
     ).encode()
     return hashlib.sha256(encoded).hexdigest()
+
+
+def infer_conservative_profile(seats: tuple[Seat, ...]) -> HallProfile:
+    """Build segments only where geometry proves a short uninterrupted seat gap.
+
+    This fallback intentionally splits uncertain rows rather than joining seats
+    across a possible aisle. A checked YAML profile remains the richer option.
+    """
+    if not seats:
+        raise DomainValidationError("cannot infer topology from an empty hall")
+    hall_ids = {seat.hall_id for seat in seats}
+    if len(hall_ids) != 1:
+        raise DomainValidationError("cannot infer topology for multiple halls")
+    rows: dict[tuple[str, str], list[Seat]] = {}
+    for seat in seats:
+        if seat.x is None or seat.width is None or not seat.block or not seat.row_label:
+            continue
+        rows.setdefault((seat.block, seat.row_label), []).append(seat)
+    segments: list[RowSegment] = []
+    for (block, row_label), row_seats in sorted(rows.items()):
+        ordered = sorted(row_seats, key=lambda seat: (seat.x or 0, seat.provider_id))
+        gaps = [
+            (right.x or 0) - (left.x or 0)
+            for left, right in zip(ordered, ordered[1:], strict=False)
+            if (right.x or 0) > (left.x or 0)
+        ]
+        groups: list[list[Seat]]
+        if not gaps:
+            groups = [ordered]
+        else:
+            short_gap = min(gaps)
+            groups = [[ordered[0]]]
+            for previous, seat in zip(ordered, ordered[1:], strict=False):
+                gap = (seat.x or 0) - (previous.x or 0)
+                if gap > short_gap * 1.5:
+                    groups.append([])
+                groups[-1].append(seat)
+        for index, group in enumerate(groups):
+            if group:
+                segments.append(
+                    RowSegment(
+                        f"inferred:{block}:{row_label}:{index}",
+                        block,
+                        row_label,
+                        tuple(seat.provider_id for seat in group),
+                    )
+                )
+    if not segments:
+        raise DomainValidationError("hall geometry is insufficient for inferred topology")
+    return HallProfile(
+        profile_id="inferred",
+        hall_id=next(iter(hall_ids)),
+        topology_fingerprint=topology_fingerprint(seats),
+        mode=SeatingMode.AUTOMATIC,
+        row_segments=tuple(segments),
+    )

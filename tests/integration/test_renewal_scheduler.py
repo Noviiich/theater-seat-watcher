@@ -200,6 +200,131 @@ def test_due_cycle_runs_at_1200_and_late_restart_collapses_missed_ticks(tmp_path
     asyncio.run(scenario())
 
 
+def test_upgrade_resumes_existing_one_cycle_live_subscription(tmp_path: Path) -> None:
+    database = tmp_path / "live-upgrade.sqlite"
+
+    async def seed() -> None:
+        factory, dispose = await _setup_database(
+            database, candidate_count=1, revision="0012_soft_delete_subscriptions"
+        )
+        held_at = datetime(2026, 9, 24, 9, tzinfo=UTC)
+        async with factory() as session, session.begin():
+            subscription = await session.get(SubscriptionModel, "subscription")
+            candidate = await session.get(CandidateModel, "candidate-1")
+            assert subscription is not None and candidate is not None
+            subscription.config = {
+                **subscription.config,
+                "booking_mode": "live",
+                "max_cycles_per_session": 1,
+            }
+            candidate.current_cycle_no = 1
+            candidate.tracking_state = "stopped"
+            candidate.stop_reason = "max_cycles_per_session"
+            session.add(
+                RenewalCycleModel(
+                    id="cycle-1",
+                    candidate_id=candidate.id,
+                    cycle_no=1,
+                    state="held",
+                    started_at=held_at,
+                    due_at=held_at + timedelta(seconds=1200),
+                    created_at=held_at,
+                )
+            )
+            await session.flush()
+            session.add(
+                CheckoutIntentModel(
+                    id="intent-1",
+                    renewal_cycle_id="cycle-1",
+                    attempt_no=1,
+                    state="confirmed",
+                    selected_seat_ids=["a1", "a2"],
+                    reserved_total_minor=4_000,
+                    expected_total_minor=4_000,
+                    created_at=held_at,
+                )
+            )
+            await session.flush()
+            session.add(
+                OrderModel(
+                    id="order-1",
+                    checkout_intent_id="intent-1",
+                    state="awaiting_payment",
+                    total_minor=4_000,
+                    held_at=held_at,
+                    expires_at=held_at + timedelta(seconds=1200),
+                    created_at=held_at,
+                )
+            )
+        await dispose()
+
+    asyncio.run(seed())
+    config = Config("alembic.ini")
+    config.set_main_option("sqlalchemy.url", f"sqlite:///{database}")
+    command.upgrade(config, "head")
+
+    async def verify() -> None:
+        engine, factory = create_session_factory(f"sqlite+aiosqlite:///{database}")
+        async with factory() as session:
+            subscription = await session.get(SubscriptionModel, "subscription")
+            candidate = await session.get(CandidateModel, "candidate-1")
+            assert subscription is not None and candidate is not None
+            assert subscription.config["max_cycles_per_session"] is None
+            assert candidate.tracking_state == "renewal_waiting"
+            assert candidate.stop_reason is None
+            assert candidate.next_run_at == datetime(2026, 9, 24, 9, 20)
+        await engine.dispose()
+
+    asyncio.run(verify())
+
+
+def test_upgrade_removes_telegram_batch_caps_and_requeues_skipped_session(tmp_path: Path) -> None:
+    database = tmp_path / "telegram-limits-upgrade.sqlite"
+
+    async def seed() -> None:
+        factory, dispose = await _setup_database(
+            database, candidate_count=2, revision="0013_enable_live_renewals"
+        )
+        async with factory() as session, session.begin():
+            subscription = await session.get(SubscriptionModel, "subscription")
+            skipped = await session.get(CandidateModel, "candidate-2")
+            assert subscription is not None and skipped is not None
+            subscription.config = {
+                **subscription.config,
+                "booking_mode": "live",
+                "max_sessions_per_batch": 1,
+                "max_active_orders": 1,
+                "max_order_total": 1_500_000,
+                "max_batch_total": 1_500_000,
+                "max_active_total": 1_500_000,
+            }
+            skipped.tracking_state = "stopped"
+            skipped.stop_reason = "max_sessions_per_batch"
+        await dispose()
+
+    asyncio.run(seed())
+    config = Config("alembic.ini")
+    config.set_main_option("sqlalchemy.url", f"sqlite:///{database}")
+    command.upgrade(config, "head")
+
+    async def verify() -> None:
+        engine, factory = create_session_factory(f"sqlite+aiosqlite:///{database}")
+        async with factory() as session:
+            subscription = await session.get(SubscriptionModel, "subscription")
+            skipped = await session.get(CandidateModel, "candidate-2")
+            assert subscription is not None and skipped is not None
+            assert subscription.config["max_order_total"] == 1_500_000
+            assert subscription.config["max_sessions_per_batch"] is None
+            assert subscription.config["max_active_orders"] is None
+            assert subscription.config["max_batch_total"] is None
+            assert subscription.config["max_active_total"] is None
+            assert skipped.tracking_state == "queued"
+            assert skipped.stop_reason is None
+        await engine.dispose()
+
+    asyncio.run(verify())
+
+
 def test_no_group_and_budget_limit_retry_after_180_seconds(tmp_path: Path) -> None:
     async def scenario() -> None:
         factory, dispose = await _setup_database(tmp_path / "wait.sqlite", candidate_count=3)
@@ -393,11 +518,15 @@ def test_elapsed_allocations_are_released_while_paused_or_stopped(tmp_path: Path
 
 
 async def _setup_database(
-    database: Path, *, candidate_count: int, max_cycles: int | None = None
+    database: Path,
+    *,
+    candidate_count: int,
+    max_cycles: int | None = None,
+    revision: str = "head",
 ) -> tuple[async_sessionmaker[AsyncSession], object]:
     config = Config("alembic.ini")
     config.set_main_option("sqlalchemy.url", f"sqlite:///{database}")
-    command.upgrade(config, "head")
+    command.upgrade(config, revision)
     engine, factory = create_session_factory(f"sqlite+aiosqlite:///{database}")
     now = datetime(2026, 9, 20, 9, tzinfo=UTC)
     async with SqlAlchemyUnitOfWork(factory) as uow:
@@ -408,7 +537,6 @@ async def _setup_database(
                     id="buyer",
                     telegram_user_id="1",
                     telegram_chat_id="1",
-                    profile_ref=None,
                     created_at=now,
                 ),
                 SubscriptionModel(

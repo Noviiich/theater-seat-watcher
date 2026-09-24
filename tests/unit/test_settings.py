@@ -47,45 +47,37 @@ def test_settings_do_not_retain_secret_values() -> None:
     settings = Settings.from_environ(
         {
             "TELEGRAM_BOT_TOKEN": "a-secret-token",
-            "ALLOWED_TELEGRAM_USER_IDS": "12345",
+            "ADMIN_TELEGRAM_USER_ID": "12345",
             "DATABASE_URL": "sqlite:///secret.db",
         }
     )
 
     assert settings.telegram_token_configured is True
-    assert settings.allowed_user_ids_configured is True
+    assert settings.administrator_configured is True
     assert settings.database_url_configured is True
     assert "a-secret-token" not in repr(settings)
     assert "secret.db" not in repr(settings)
 
 
-def test_settings_parse_numeric_telegram_allowlist() -> None:
-    settings = Settings.from_environ({"ALLOWED_TELEGRAM_USER_IDS": "12, 34,12"})
+def test_settings_parse_numeric_telegram_administrator() -> None:
+    settings = Settings.from_environ({"ADMIN_TELEGRAM_USER_ID": "12"})
 
-    assert settings.allowed_telegram_user_ids == frozenset({"12", "34"})
-
-
-def test_settings_reject_invalid_telegram_allowlist() -> None:
-    with pytest.raises(ValueError, match="ALLOWED_TELEGRAM_USER_IDS"):
-        Settings.from_environ({"ALLOWED_TELEGRAM_USER_IDS": "12,not-an-id"})
+    assert settings.administrator_telegram_user_id == "12"
 
 
-def test_live_mode_requires_private_buyer_profile_path() -> None:
-    with pytest.raises(ValueError, match="BUYER_PROFILE_PATH"):
-        Settings.from_environ({"BOOKING_MODE": "live"})
-
-    settings = Settings.from_environ(
-        {"BOOKING_MODE": "live", "BUYER_PROFILE_PATH": "/private/buyer.json"}
-    )
-
-    assert settings.buyer_profile_path is not None
-    assert "buyer.json" not in repr(settings)
+def test_settings_reject_invalid_telegram_administrator() -> None:
+    with pytest.raises(ValueError, match="ADMIN_TELEGRAM_USER_ID"):
+        Settings.from_environ({"ADMIN_TELEGRAM_USER_ID": "not-an-id"})
 
 
-def test_runtime_requires_private_infrastructure_and_keeps_live_gate_closed() -> None:
+def test_live_mode_does_not_require_a_buyer_profile_file() -> None:
+    assert Settings.from_environ({"BOOKING_MODE": "live"}).booking_mode is BookingMode.LIVE
+
+
+def test_runtime_requires_private_infrastructure_and_live_payment_terminal() -> None:
     complete = {
         "TELEGRAM_BOT_TOKEN": "123456:valid-looking-token",
-        "ALLOWED_TELEGRAM_USER_IDS": "10",
+        "ADMIN_TELEGRAM_USER_ID": "10",
         "DATABASE_URL": "sqlite+aiosqlite:///data/app.sqlite3",
     }
     Settings.from_environ(complete).validate_runtime()
@@ -94,11 +86,17 @@ def test_runtime_requires_private_infrastructure_and_keeps_live_gate_closed() ->
         Settings.from_environ({}).validate_runtime()
     with pytest.raises(ValueError, match=r"sqlite\+aiosqlite"):
         Settings.from_environ({**complete, "DATABASE_URL": "postgresql://db"}).validate_runtime()
-    with pytest.raises(ValueError, match="live acceptance"):
+    with pytest.raises(ValueError, match="QUICKTICKETS_PAYMENT_TERMINAL_CHOICE"):
         Settings.from_environ(
             {
                 **complete,
                 "BOOKING_MODE": "live",
-                "BUYER_PROFILE_PATH": "/private/buyer.json",
             }
         ).validate_runtime()
+    Settings.from_environ(
+        {
+            **complete,
+            "BOOKING_MODE": "live",
+            "QUICKTICKETS_PAYMENT_TERMINAL_CHOICE": "bank-sber-2:sbp",
+        }
+    ).validate_runtime()

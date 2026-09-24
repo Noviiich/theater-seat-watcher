@@ -33,7 +33,7 @@ class Application:
             f"expected_hold_ttl_seconds={self.settings.expected_hold_ttl_seconds}",
             f"availability_retry_seconds={self.settings.availability_retry_seconds}",
             f"telegram_token_configured={self.settings.telegram_token_configured}",
-            f"allowed_user_ids_configured={self.settings.allowed_user_ids_configured}",
+            f"administrator_configured={self.settings.administrator_configured}",
             f"database_url_configured={self.settings.database_url_configured}",
             "network_operations=disabled",
             "ticket_operations=disabled",

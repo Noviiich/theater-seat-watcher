@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from pathlib import Path
 
 from aiogram import Bot
 
@@ -27,8 +26,11 @@ from theater_tickets.adapters.persistence.runtime import (
     SqlAlchemyActiveSubscriptionSource,
     SqlAlchemyRuntimeStateStore,
 )
-from theater_tickets.adapters.quicktickets.buyer import load_buyer_profile, to_checkout_buyer
-from theater_tickets.adapters.quicktickets.checkout import QuickTicketsCheckoutAdapter
+from theater_tickets.adapters.quicktickets.browser import PlaywrightQuickTicketsBrowserDriver
+from theater_tickets.adapters.quicktickets.checkout import (
+    QuickTicketsBrowserCheckoutTransport,
+    QuickTicketsCheckoutAdapter,
+)
 from theater_tickets.adapters.quicktickets.client import QuickTicketsClient
 from theater_tickets.adapters.quicktickets.profiles import DirectorySeatProfileSource
 from theater_tickets.adapters.quicktickets.provider import QuickTicketsProvider
@@ -39,9 +41,9 @@ from theater_tickets.adapters.telegram.app import build_dispatcher
 from theater_tickets.adapters.telegram.notifier import AiogramNotificationTransport
 from theater_tickets.application.booking import CandidateEvaluator
 from theater_tickets.application.checkout import (
-    CheckoutBuyer,
     CheckoutRequest,
     CheckoutStageRecorder,
+    CheckoutWriteTransport,
     ProviderCheckoutObservation,
 )
 from theater_tickets.application.reconciliation import CheckoutRecoveryService
@@ -71,6 +73,7 @@ async def run_production(settings: Settings) -> None:
     settings.validate_runtime()
     assert settings.database_url is not None
     assert settings.telegram_bot_token is not None
+    assert settings.administrator_telegram_user_id is not None
     engine, session_factory = create_session_factory(settings.database_url)
     bot = Bot(token=settings.telegram_bot_token)
     client = QuickTicketsClient(
@@ -87,14 +90,24 @@ async def run_production(settings: Settings) -> None:
         booking_repository = SqlAlchemyBookingRepository(session_factory)
         evaluator = CandidateEvaluator(provider=provider, profiles=profiles)
         recorder = SqlAlchemyCheckoutStageRecorder(session_factory, now=now)
+        runtime_booking_mode = BookingMode(settings.booking_mode.value)
+        write_transport: CheckoutWriteTransport
+        if runtime_booking_mode is BookingMode.LIVE:
+            assert settings.quicktickets_payment_terminal_choice is not None
+            write_transport = QuickTicketsBrowserCheckoutTransport(
+                lambda: PlaywrightQuickTicketsBrowserDriver(
+                    theatre_alias=settings.theatre_alias,
+                    payment_terminal_choice=settings.quicktickets_payment_terminal_choice or "",
+                    now=now,
+                )
+            )
+        else:
+            write_transport = _DisabledWriteTransport()
         checkout = QuickTicketsCheckoutAdapter(
-            booking_mode=BookingMode.DRY_RUN,
-            transport=_DisabledWriteTransport(),
+            booking_mode=runtime_booking_mode,
+            transport=write_transport,
             recorder=recorder,
         )
-
-        def buyer_loader(profile_ref: str) -> CheckoutBuyer:
-            return to_checkout_buyer(load_buyer_profile(Path(profile_ref)))
 
         renewal_repository = SqlAlchemyRenewalRepository(session_factory)
         renewal_worker = RenewalWorker(
@@ -106,7 +119,6 @@ async def run_production(settings: Settings) -> None:
                 checkout=checkout,
                 order_writer=SqlAlchemyOrderOutboxWriter(session_factory),
                 failures=booking_repository,
-                buyer_loader=buyer_loader,
                 now=now,
             ),
         )
@@ -118,12 +130,8 @@ async def run_production(settings: Settings) -> None:
         outbox_worker = OutboxWorker(
             repository=SqlAlchemyOutboxRepository(session_factory),
             transport=AiogramNotificationTransport(bot),
-            allowed_user_ids=settings.allowed_telegram_user_ids,
         )
-        recovery_loader = SqlAlchemyRecoveryRequestLoader(
-            session_factory,
-            buyer_loader=buyer_loader,
-        )
+        recovery_loader = SqlAlchemyRecoveryRequestLoader(session_factory)
         recovery = CheckoutRecoveryService(
             repository=SqlAlchemyRecoveryRepository(session_factory, now=now),
             request_loader=recovery_loader,
@@ -148,12 +156,10 @@ async def run_production(settings: Settings) -> None:
             subscriptions=SqlAlchemyActiveSubscriptionSource(session_factory),
         )
         dispatcher = build_dispatcher(
-            allowed_user_ids=settings.allowed_telegram_user_ids,
+            administrator_user_id=settings.administrator_telegram_user_id,
             session_factory=session_factory,
             catalogue_stale_after_seconds=settings.poll_interval_seconds * 3,
-            buyer_profile_ref=(
-                str(settings.buyer_profile_path) if settings.buyer_profile_path else None
-            ),
+            booking_mode=settings.booking_mode,
         )
 
         async def poll_catalogue() -> object:

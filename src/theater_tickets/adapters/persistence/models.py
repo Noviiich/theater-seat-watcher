@@ -28,8 +28,25 @@ class BuyerModel(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     telegram_user_id: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
     telegram_chat_id: Mapped[str] = mapped_column(String(32), nullable=False)
-    profile_ref: Mapped[str | None] = mapped_column(String(255))
+    lastname: Mapped[str | None] = mapped_column(String(255))
+    firstname: Mapped[str | None] = mapped_column(String(255))
+    middlename: Mapped[str | None] = mapped_column(String(255))
+    email: Mapped[str | None] = mapped_column(String(320))
+    phone: Mapped[str | None] = mapped_column(String(32))
+    personal_data_consent: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+
+class TelegramAccessModel(Base):
+    """A user request approved or rejected by the configured administrator."""
+
+    __tablename__ = "telegram_access"
+
+    telegram_user_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    telegram_chat_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    state: Mapped[str] = mapped_column(String(16), nullable=False)
+    requested_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class SubscriptionModel(Base):
@@ -43,6 +60,7 @@ class SubscriptionModel(Base):
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     version: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
     config: Mapped[dict[str, object]] = mapped_column(JSON, nullable=False, default=dict)
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class SessionModel(Base):

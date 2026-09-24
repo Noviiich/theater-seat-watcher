@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from collections import deque
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
@@ -34,6 +34,7 @@ class BrowserHoldObservation:
     accepted: bool
     seat_ids: tuple[str, ...]
     error_code: CheckoutErrorCode | None = None
+    uncertain: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,49 +59,56 @@ class QuickTicketsBrowserDriver(Protocol):
     async def submit_contact_form(self, request: CheckoutRequest) -> ProviderCheckoutObservation:
         """Click the resolved real submitter once and inspect the payment handoff."""
 
+    async def aclose(self) -> None:
+        """Close the isolated browser context regardless of the checkout outcome."""
+
 
 class QuickTicketsBrowserCheckoutTransport:
     """Orchestrate the confirmed browser stages without retrying a write."""
 
-    def __init__(self, driver: QuickTicketsBrowserDriver) -> None:
-        self._driver = driver
+    def __init__(self, driver_factory: Callable[[], QuickTicketsBrowserDriver]) -> None:
+        self._driver_factory = driver_factory
 
     async def submit(
         self, request: CheckoutRequest, *, recorder: CheckoutStageRecorder
     ) -> ProviderCheckoutObservation:
-        hold = await self._driver.initialize_hold(request)
-        if not hold.accepted:
-            return ProviderCheckoutObservation(
-                CheckoutState.REJECTED,
-                error_code=hold.error_code or CheckoutErrorCode.SEAT_CONFLICT,
-            )
-        if hold.seat_ids != request.seat_ids:
-            return ProviderCheckoutObservation(
-                CheckoutState.AMBIGUOUS,
-                error_code=CheckoutErrorCode.PARTIAL_RESULT,
-                seat_ids=hold.seat_ids,
-            )
-        await recorder.record(request.intent_id, CheckoutStage.HOLD_CREATED)
+        driver = self._driver_factory()
+        try:
+            hold = await driver.initialize_hold(request)
+            if not hold.accepted:
+                return ProviderCheckoutObservation(
+                    CheckoutState.AMBIGUOUS if hold.uncertain else CheckoutState.REJECTED,
+                    error_code=hold.error_code or CheckoutErrorCode.SEAT_CONFLICT,
+                )
+            if hold.seat_ids != request.seat_ids:
+                return ProviderCheckoutObservation(
+                    CheckoutState.AMBIGUOUS,
+                    error_code=CheckoutErrorCode.PARTIAL_RESULT,
+                    seat_ids=hold.seat_ids,
+                )
+            await recorder.record(request.intent_id, CheckoutStage.HOLD_CREATED)
 
-        form = await self._driver.open_contact_form()
-        if form.auth_expired:
-            return ProviderCheckoutObservation(
-                CheckoutState.REJECTED,
-                error_code=CheckoutErrorCode.AUTH_EXPIRED,
-            )
-        if form.captcha_present:
-            return ProviderCheckoutObservation(
-                CheckoutState.REQUIRES_USER_ACTION,
-                error_code=CheckoutErrorCode.CAPTCHA,
-            )
-        if not _CONTACT_FIELDS.issubset(form.input_names) or not form.submitter_ready:
-            return ProviderCheckoutObservation(
-                CheckoutState.REQUIRES_USER_ACTION,
-                error_code=CheckoutErrorCode.CONTRACT_CHANGED,
-            )
-        await recorder.record(request.intent_id, CheckoutStage.CONTACT_FORM_RECEIVED)
-        await recorder.record(request.intent_id, CheckoutStage.CONFIRM_STARTED)
-        return await self._driver.submit_contact_form(request)
+            form = await driver.open_contact_form()
+            if form.auth_expired:
+                return ProviderCheckoutObservation(
+                    CheckoutState.AMBIGUOUS,
+                    error_code=CheckoutErrorCode.AUTH_EXPIRED,
+                )
+            if form.captcha_present:
+                return ProviderCheckoutObservation(
+                    CheckoutState.REQUIRES_USER_ACTION,
+                    error_code=CheckoutErrorCode.CAPTCHA,
+                )
+            if not _CONTACT_FIELDS.issubset(form.input_names) or not form.submitter_ready:
+                return ProviderCheckoutObservation(
+                    CheckoutState.REQUIRES_USER_ACTION,
+                    error_code=CheckoutErrorCode.CONTRACT_CHANGED,
+                )
+            await recorder.record(request.intent_id, CheckoutStage.CONTACT_FORM_RECEIVED)
+            await recorder.record(request.intent_id, CheckoutStage.CONFIRM_STARTED)
+            return await driver.submit_contact_form(request)
+        finally:
+            await driver.aclose()
 
 
 class QuickTicketsCheckoutAdapter:
@@ -136,6 +144,13 @@ class QuickTicketsCheckoutAdapter:
             return CheckoutResult(
                 CheckoutState.AMBIGUOUS,
                 error_code=CheckoutErrorCode.TRANSPORT_TIMEOUT,
+            )
+        except Exception:
+            await self._recorder.record(
+                request.intent_id, CheckoutStage.AMBIGUOUS, CheckoutErrorCode.CONTRACT_CHANGED
+            )
+            return CheckoutResult(
+                CheckoutState.AMBIGUOUS, error_code=CheckoutErrorCode.CONTRACT_CHANGED
             )
 
         await self._recorder.record(request.intent_id, CheckoutStage.RESPONSE_RECEIVED)
@@ -190,12 +205,12 @@ class QuickTicketsCheckoutAdapter:
                 else CheckoutErrorCode.SEAT_MISMATCH
             )
             return CheckoutResult(CheckoutState.AMBIGUOUS, error_code=code)
-        if observation.total != request.expected_total:
+        if observation.total is None or observation.total < request.expected_total:
             return CheckoutResult(
                 CheckoutState.AMBIGUOUS,
                 error_code=CheckoutErrorCode.AMOUNT_MISMATCH,
             )
-        if observation.total is None or observation.total > request.reserved_total:
+        if observation.total > request.reserved_total:
             return CheckoutResult(
                 CheckoutState.AMBIGUOUS,
                 error_code=CheckoutErrorCode.AMOUNT_MISMATCH,

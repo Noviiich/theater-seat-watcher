@@ -4,20 +4,22 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from datetime import datetime
+from decimal import Decimal
 from enum import StrEnum
 from typing import Protocol
 from zoneinfo import ZoneInfo
 
-from theater_tickets.application.checkout import CheckoutRequest, CheckoutResult
+from theater_tickets.application.checkout import CheckoutBuyer, CheckoutRequest, CheckoutResult
 from theater_tickets.application.ports import TheatreProvider
 from theater_tickets.application.renewals import RenewalTask
-from theater_tickets.domain.models import Money, Session, Subscription
+from theater_tickets.domain.models import Money, Seat, Session, Subscription
 from theater_tickets.domain.seating.candidates import (
     RankedGroup,
+    ScoringWeights,
     SelectionPreferences,
     rank_groups,
 )
-from theater_tickets.domain.seating.topology import HallProfile
+from theater_tickets.domain.seating.topology import HallProfile, infer_conservative_profile
 
 MOSCOW = ZoneInfo("Europe/Moscow")
 
@@ -41,7 +43,7 @@ class BookingCandidateContext:
     candidate_id: str
     buyer_id: str
     subscription_version: int
-    profile_ref: str | None
+    buyer: CheckoutBuyer | None
     subscription: Subscription
     session: Session
 
@@ -72,6 +74,9 @@ class DryRunReport:
 class SeatProfileSource(Protocol):
     def load(self, profile_id: str) -> SeatSelectionConfiguration:
         """Return one validated topology and its deterministic preferences."""
+
+    def find_matching(self, inventory: tuple[Seat, ...]) -> SeatSelectionConfiguration:
+        """Find a verified profile matching the current hall geometry."""
 
 
 class CheckoutSubmitter(Protocol):
@@ -151,7 +156,14 @@ class CandidateEvaluator:
         if not capabilities.allows_regular_sale(context.subscription.ticket_count):
             return BookingEvaluation(EvaluationState.WAITING_AVAILABILITY, "sale_unavailable")
         inventory = await self._provider.fetch_inventory(session.key)
-        configuration = self._profiles.load(context.subscription.seat_profile_id)
+        try:
+            configuration = (
+                self._profiles.find_matching(inventory)
+                if context.subscription.seat_profile_id == "auto"
+                else self._profiles.load(context.subscription.seat_profile_id)
+            )
+        except LookupError:
+            configuration = _inferred_configuration(inventory)
         preferences = replace(
             configuration.preferences,
             ticket_count=context.subscription.ticket_count,
@@ -175,3 +187,26 @@ class CandidateEvaluator:
             session=session,
             group=selected,
         )
+
+
+def _inferred_configuration(inventory: tuple[Seat, ...]) -> SeatSelectionConfiguration:
+    profile = infer_conservative_profile(inventory)
+    xs = [seat.x for seat in inventory if seat.x is not None]
+    if not xs:
+        raise LookupError("hall geometry is insufficient")
+    minimum, maximum = min(xs), max(xs)
+    width = max(maximum - minimum, 1)
+    return SeatSelectionConfiguration(
+        profile=profile,
+        preferences=SelectionPreferences(
+            ticket_count=1,
+            max_ticket_price=None,
+            max_order_total=None,
+            row_quality={segment.row_label: Decimal(1) for segment in profile.row_segments},
+            weights=ScoringWeights(Decimal("0.2"), Decimal("0.4"), Decimal("0.4"), Decimal(0)),
+            min_quality=Decimal(0),
+            view_axis_x=Decimal(minimum + maximum) / Decimal(2),
+            normalization_width=Decimal(width),
+            aisle_quality={segment.segment_id: Decimal(1) for segment in profile.row_segments},
+        ),
+    )

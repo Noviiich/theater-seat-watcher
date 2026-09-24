@@ -21,6 +21,7 @@ from theater_tickets.adapters.persistence.models import (
     RuntimeLockModel,
     RuntimeWorkerModel,
     SessionModel,
+    SubscriptionModel,
 )
 from theater_tickets.adapters.persistence.repositories import SubscriptionRepository
 from theater_tickets.application.runtime import WorkerRun
@@ -189,6 +190,21 @@ class SqlAlchemyStatusReader:
                     ),
                 )
 
+            subscription_counts = (
+                await database.execute(
+                    select(SubscriptionModel.enabled, func.count())
+                    .where(
+                        SubscriptionModel.buyer_id == buyer_id,
+                        SubscriptionModel.deleted_at.is_(None),
+                    )
+                    .group_by(SubscriptionModel.enabled)
+                )
+            ).all()
+            active_subscriptions = sum(count for enabled, count in subscription_counts if enabled)
+            paused_subscriptions = sum(
+                count for enabled, count in subscription_counts if not enabled
+            )
+
             pending_states = ("pending", "retry", "sending")
             pending_outbox, oldest_outbox = (
                 await database.execute(
@@ -217,18 +233,22 @@ class SqlAlchemyStatusReader:
             )
             candidate_rows = (
                 await database.execute(
-                    select(CandidateModel, SessionModel, latest_expiry.label("expires_at"))
+                    select(
+                        CandidateModel,
+                        SessionModel,
+                        SubscriptionModel.enabled,
+                        SubscriptionModel.deleted_at,
+                        latest_expiry.label("expires_at"),
+                    )
                     .join(SessionModel, SessionModel.id == CandidateModel.session_id)
+                    .join(SubscriptionModel, SubscriptionModel.id == CandidateModel.subscription_id)
                     .where(CandidateModel.buyer_id == buyer_id)
                     .order_by(SessionModel.starts_at, CandidateModel.id)
                 )
             ).all()
-            return RuntimeStatus(
-                last_complete_catalogue_at=last_catalogue,
-                pending_outbox=int(pending_outbox or 0),
-                oldest_outbox_at=_aware(oldest_outbox),
-                ambiguous_writes=int(ambiguous or 0),
-                candidates=tuple(
+            candidates = []
+            for candidate, session, enabled, deleted_at, expires_at in candidate_rows:
+                candidates.append(
                     CandidateStatus(
                         candidate.id,
                         session.title,
@@ -237,9 +257,17 @@ class SqlAlchemyStatusReader:
                         _aware(candidate.next_run_at),
                         candidate.stop_reason,
                         _aware(expires_at),
+                        _aware(session.starts_at),
+                        enabled and deleted_at is None,
+                        _aware(candidate.watch_until),
                     )
-                    for candidate, session, expires_at in candidate_rows
-                ),
+                )
+            return RuntimeStatus(
+                last_complete_catalogue_at=last_catalogue,
+                pending_outbox=int(pending_outbox or 0),
+                oldest_outbox_at=_aware(oldest_outbox),
+                ambiguous_writes=int(ambiguous or 0),
+                candidates=tuple(candidates),
                 workers=tuple(
                     (
                         worker.name,
@@ -249,4 +277,6 @@ class SqlAlchemyStatusReader:
                     )
                     for worker in workers
                 ),
+                active_subscriptions=active_subscriptions,
+                paused_subscriptions=paused_subscriptions,
             )

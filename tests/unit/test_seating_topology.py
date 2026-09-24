@@ -11,7 +11,7 @@ from theater_tickets.adapters.quicktickets.profiles import (
 )
 from theater_tickets.domain.errors import DomainValidationError
 from theater_tickets.domain.models import Money, Seat, SeatAvailability
-from theater_tickets.domain.seating.topology import topology_fingerprint
+from theater_tickets.domain.seating.topology import infer_conservative_profile, topology_fingerprint
 
 
 def _seats() -> tuple[Seat, ...]:
@@ -72,6 +72,30 @@ def _raw() -> dict[str, object]:
         ],
         "preferred_groups": [{"id": "pair", "priority": 0, "seat_ids": ["a", "b"]}],
     }
+
+
+def test_inferred_topology_splits_a_large_gap_as_a_possible_aisle() -> None:
+    profile = infer_conservative_profile(
+        _seats()
+        + (
+            Seat(
+                "d",
+                "16",
+                "Партер",
+                "1",
+                "0",
+                Money(70000),
+                SeatAvailability.FREE,
+                x=100,
+                y=0,
+                width=1,
+                height=1,
+                rotation=0,
+            ),
+        )
+    )
+
+    assert [segment.seat_ids for segment in profile.row_segments] == [("a", "b", "c"), ("d",)]
 
 
 def test_verified_profile_uses_explicit_order_and_ignores_price_availability_changes() -> None:

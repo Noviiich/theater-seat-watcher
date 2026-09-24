@@ -15,7 +15,8 @@ from theater_tickets.adapters.persistence.models import (
     RenewalCycleModel,
     SessionModel,
 )
-from theater_tickets.application.checkout import CheckoutBuyer, CheckoutRequest
+from theater_tickets.adapters.quicktickets.buyer import validate_buyer_profile
+from theater_tickets.application.checkout import CheckoutRequest
 from theater_tickets.application.reconciliation import (
     IncompleteCheckout,
     RecoveryDisposition,
@@ -94,16 +95,13 @@ class SqlAlchemyRecoveryRepository:
 
 
 class SqlAlchemyRecoveryRequestLoader:
-    """Rebuild the immutable checkout snapshot while loading buyer secrets by reference."""
+    """Rebuild the immutable checkout snapshot from the persisted buyer profile."""
 
     def __init__(
         self,
         session_factory: async_sessionmaker[AsyncSession],
-        *,
-        buyer_loader: Callable[[str], CheckoutBuyer],
     ) -> None:
         self._session_factory = session_factory
-        self._buyer_loader = buyer_loader
 
     async def load(self, intent_id: str) -> CheckoutRequest:
         async with self._session_factory() as database:
@@ -115,7 +113,12 @@ class SqlAlchemyRecoveryRequestLoader:
                         CheckoutIntentModel.reserved_total_minor,
                         CheckoutIntentModel.currency,
                         CheckoutIntentModel.expected_hold_ttl_seconds,
-                        BuyerModel.profile_ref,
+                        BuyerModel.lastname,
+                        BuyerModel.firstname,
+                        BuyerModel.middlename,
+                        BuyerModel.email,
+                        BuyerModel.phone,
+                        BuyerModel.personal_data_consent,
                         SessionModel.provider,
                         SessionModel.theatre_alias,
                         SessionModel.provider_session_id,
@@ -138,14 +141,26 @@ class SqlAlchemyRecoveryRequestLoader:
             reserved_total_minor,
             currency,
             expected_hold_ttl_seconds,
-            profile_ref,
+            lastname,
+            firstname,
+            middlename,
+            email,
+            phone,
+            personal_data_consent,
             provider,
             theatre_alias,
             provider_session_id,
         ) = row
-        if profile_ref is None:
-            raise LookupError("checkout buyer profile reference is missing")
-        buyer = self._buyer_loader(profile_ref)
+        if any(value is None for value in (lastname, firstname, middlename, email, phone)):
+            raise LookupError("checkout buyer profile is missing")
+        buyer = validate_buyer_profile(
+            lastname=lastname,
+            firstname=firstname,
+            middlename=middlename,
+            email=email,
+            phone=phone,
+            personal_data_consent=personal_data_consent,
+        )
         return CheckoutRequest(
             intent_id=intent_id,
             session_key=SessionKey(provider, theatre_alias, provider_session_id),

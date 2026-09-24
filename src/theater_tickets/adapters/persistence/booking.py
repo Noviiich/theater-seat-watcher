@@ -23,8 +23,9 @@ from theater_tickets.adapters.persistence.models import (
 from theater_tickets.adapters.persistence.outbox import SqlAlchemyOrderOutboxWriter
 from theater_tickets.adapters.persistence.renewals import SqlAlchemyRenewalRepository
 from theater_tickets.adapters.persistence.repositories import _subscription_from_model
+from theater_tickets.adapters.quicktickets.buyer import validate_buyer_profile
 from theater_tickets.application.booking import BookingCandidateContext, DryRunReport
-from theater_tickets.application.checkout import ConfirmedOrder
+from theater_tickets.application.checkout import CheckoutBuyer, ConfirmedOrder
 from theater_tickets.application.outbox import BatchSessionResult
 from theater_tickets.application.renewals import RenewalTask
 from theater_tickets.domain.models import Session, SessionKey
@@ -32,6 +33,35 @@ from theater_tickets.domain.models import Session, SessionKey
 
 def _aware(value: datetime) -> datetime:
     return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+
+
+def _checkout_buyer(buyer: BuyerModel) -> CheckoutBuyer | None:
+    lastname, firstname, middlename, email, phone = (
+        buyer.lastname,
+        buyer.firstname,
+        buyer.middlename,
+        buyer.email,
+        buyer.phone,
+    )
+    if (
+        lastname is None
+        or firstname is None
+        or middlename is None
+        or email is None
+        or phone is None
+    ):
+        return None
+    try:
+        return validate_buyer_profile(
+            lastname=lastname,
+            firstname=firstname,
+            middlename=middlename,
+            email=email,
+            phone=phone,
+            personal_data_consent=buyer.personal_data_consent,
+        )
+    except ValueError:
+        return None
 
 
 class SqlAlchemyBookingRepository:
@@ -66,7 +96,7 @@ class SqlAlchemyBookingRepository:
             candidate_id=candidate.id,
             buyer_id=buyer.id,
             subscription_version=subscription.version,
-            profile_ref=buyer.profile_ref,
+            buyer=_checkout_buyer(buyer),
             subscription=_subscription_from_model(subscription, buyer.telegram_user_id),
             session=Session(
                 key=SessionKey(

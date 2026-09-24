@@ -96,7 +96,7 @@ def restore_database(database_url: str, backup: Path) -> Path | None:
         backup_database(database_url, safety_copy)
     temporary = target.with_name(f".{target.name}.{uuid4().hex}.restore")
     try:
-        _sqlite_backup(backup, temporary)
+        _sqlite_backup(backup, temporary, immutable_source=True)
         _verify_integrity(temporary)
         _chmod_private(temporary)
         for sidecar_suffix in ("-wal", "-shm"):
@@ -107,14 +107,24 @@ def restore_database(database_url: str, backup: Path) -> Path | None:
     return safety_copy
 
 
-def _sqlite_backup(source: Path, destination: Path) -> None:
-    with sqlite3.connect(source) as source_connection:
+def _sqlite_backup(
+    source: Path,
+    destination: Path,
+    *,
+    immutable_source: bool = False,
+) -> None:
+    source_connection = (
+        sqlite3.connect(f"file:{source}?mode=ro&immutable=1", uri=True)
+        if immutable_source
+        else sqlite3.connect(source)
+    )
+    with source_connection:
         with sqlite3.connect(destination) as destination_connection:
             source_connection.backup(destination_connection)
 
 
 def _verify_integrity(path: Path) -> None:
-    with sqlite3.connect(f"file:{path}?mode=ro", uri=True) as connection:
+    with sqlite3.connect(f"file:{path}?mode=ro&immutable=1", uri=True) as connection:
         result = connection.execute("PRAGMA integrity_check").fetchone()
     if result != ("ok",):
         raise RuntimeError("SQLite backup integrity check failed")

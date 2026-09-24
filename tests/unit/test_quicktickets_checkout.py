@@ -83,6 +83,18 @@ def test_confirmed_order_requires_and_preserves_exact_contract() -> None:
     ]
 
 
+def test_confirmed_order_may_include_commission_within_reserved_limit() -> None:
+    observation = replace(_confirmed(), total=Money(4_100))
+    result = asyncio.run(
+        _adapter(
+            BookingMode.LIVE,
+            FakeCheckoutTransport([observation]),
+            MemoryCheckoutStageRecorder(),
+        ).submit(_request())
+    )
+    assert result.state is CheckoutState.CONFIRMED
+
+
 @pytest.mark.parametrize(
     ("observation", "error_code"),
     [
@@ -95,7 +107,7 @@ def test_confirmed_order_requires_and_preserves_exact_contract() -> None:
             CheckoutErrorCode.SEAT_MISMATCH,
         ),
         (
-            replace(_confirmed(), total=Money(4_100)),
+            replace(_confirmed(), total=Money(3_900)),
             CheckoutErrorCode.AMOUNT_MISMATCH,
         ),
         (
@@ -220,7 +232,7 @@ def test_timeout_after_write_start_is_ambiguous_and_not_retried() -> None:
 def test_browser_transport_records_each_changing_stage_before_confirm() -> None:
     driver = _FakeBrowserDriver()
     recorder = MemoryCheckoutStageRecorder()
-    transport = QuickTicketsBrowserCheckoutTransport(driver)
+    transport = QuickTicketsBrowserCheckoutTransport(lambda: driver)
 
     observation = asyncio.run(transport.submit(_request(), recorder=recorder))
 
@@ -276,7 +288,7 @@ def test_browser_transport_stops_before_unsafe_next_stage(
     driver = _FakeBrowserDriver(hold=hold, form=form)
 
     result = asyncio.run(
-        QuickTicketsBrowserCheckoutTransport(driver).submit(
+        QuickTicketsBrowserCheckoutTransport(lambda: driver).submit(
             _request(), recorder=MemoryCheckoutStageRecorder()
         )
     )
@@ -338,6 +350,9 @@ class _FakeBrowserDriver:
     async def submit_contact_form(self, request: CheckoutRequest) -> ProviderCheckoutObservation:
         self.calls.append("submit_contact_form")
         return _confirmed()
+
+    async def aclose(self) -> None:
+        pass
 
 
 def _request() -> CheckoutRequest:

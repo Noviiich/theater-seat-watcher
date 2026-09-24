@@ -19,6 +19,9 @@ class CandidateStatus:
     next_run_at: datetime | None
     stop_reason: str | None
     expires_at: datetime | None
+    starts_at: datetime | None = None
+    subscription_enabled: bool = True
+    watch_until: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,10 +32,97 @@ class RuntimeStatus:
     ambiguous_writes: int
     candidates: tuple[CandidateStatus, ...]
     workers: tuple[tuple[str, str, datetime | None, str | None], ...] = ()
+    active_subscriptions: int = 0
+    paused_subscriptions: int = 0
 
 
 class StatusReader(Protocol):
     async def for_user(self, telegram_user_id: str, *, now: datetime) -> RuntimeStatus: ...
+
+
+def render_user_status(
+    status: RuntimeStatus,
+    *,
+    now: datetime,
+    stale_after_seconds: int,
+) -> str:
+    """Summarize tracking and next actions for the Telegram menu."""
+    _aware(now)
+    active = status.active_subscriptions
+    paused = status.paused_subscriptions
+    if active:
+        lines = [f"Отслеживание включено. Активных подписок: {active}."]
+    elif paused:
+        lines = ["Поиск приостановлен. Возобновите подписку в «Моих подписках»."]
+    else:
+        lines = ["Поиск не настроен. Создайте подписку кнопкой «➕ Новая подписка»."]
+    if paused and active:
+        lines.append(f"Подписок на паузе: {paused}.")
+
+    if active:
+        if status.last_complete_catalogue_at is None:
+            lines.append("Афиша ещё не загружена. Бот начнёт поиск после первой загрузки.")
+        else:
+            age = max(0, int((now - status.last_complete_catalogue_at).total_seconds()))
+            if age > stale_after_seconds:
+                lines.append("Не удаётся обновить афишу. Бот продолжит попытки автоматически.")
+            else:
+                lines.append(f"Афиша проверена {_ago(age)} назад.")
+
+    visible = [
+        item
+        for item in status.candidates
+        if item.subscription_enabled
+        and (item.watch_until is None or item.watch_until > now)
+        and item.state not in {"stopped", "skipped_limit", "dry_run_completed"}
+    ]
+    if visible:
+        lines.append("Найденные сеансы:")
+        for item in visible[:5]:
+            title = item.title
+            if item.starts_at is not None:
+                _aware(item.starts_at)
+                title += f" · {item.starts_at.astimezone(MOSCOW):%d.%m.%Y %H:%M} МСК"
+            lines.append(f"• {title}: {_user_candidate_state(item, now=now)}")
+        if len(visible) > 5:
+            lines.append(f"И ещё сеансов: {len(visible) - 5}.")
+    elif active:
+        lines.append("Подходящих новых сеансов пока нет.")
+
+    if status.pending_outbox:
+        lines.append("Сообщение с результатом задерживается. Бот попробует отправить его снова.")
+    if status.ambiguous_writes:
+        lines.append("Результат оформления пока неясен. Повторная попытка приостановлена.")
+    return "\n".join(lines)
+
+
+def _user_candidate_state(item: CandidateStatus, *, now: datetime) -> str:
+    states = {
+        "queued": "готовится подбор мест",
+        "dry_run_queued": "готовится проверка мест без бронирования",
+        "dry_run_claimed": "проверяются места без бронирования",
+        "processing": "подбираются места",
+        "submitting": "оформляется заказ",
+        "renewal_claimed": "подбираются места для новой ссылки",
+        "renewal_waiting": "новая ссылка будет подготовлена после окончания текущего удержания",
+        "awaiting_payment": "ссылка на оплату подготовлена; проверьте сообщения бота",
+        "waiting_availability": "соседних мест пока нет; поиск продолжится",
+        "waiting_budget": "достигнут лимит стоимости или заказов; поиск продолжится",
+        "needs_attention": "нужно ваше участие; проверьте сообщения бота",
+    }
+    result = states.get(item.state, "проверяется")
+    if item.next_run_at is not None and item.state not in {"needs_attention"}:
+        _aware(item.next_run_at)
+        remaining = max(0, int((item.next_run_at - now).total_seconds()))
+        result += f", следующая попытка через {_duration(remaining)}"
+    if (
+        item.expires_at is not None
+        and item.expires_at > now
+        and item.state in {"awaiting_payment", "renewal_waiting"}
+    ):
+        _aware(item.expires_at)
+        result += f"; на оплату осталось {_duration(int((item.expires_at - now).total_seconds()))}"
+    return result + "."
 
 
 def render_status(

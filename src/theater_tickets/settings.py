@@ -54,14 +54,19 @@ def _booking_mode(value: str | None) -> BookingMode:
         raise ValueError(message) from exc
 
 
-def _allowed_user_ids(value: str | None) -> frozenset[str]:
-    """Parse a comma-separated allowlist without exposing it in status output."""
+def _telegram_user_id(value: str | None) -> str | None:
     if value is None or not value.strip():
-        return frozenset()
-    values = frozenset(item.strip() for item in value.split(",") if item.strip())
-    if not values or any(not item.isdecimal() for item in values):
-        raise ValueError("ALLOWED_TELEGRAM_USER_IDS must be comma-separated numeric IDs")
-    return values
+        return None
+    normalized = value.strip()
+    if not normalized.isdecimal():
+        raise ValueError("ADMIN_TELEGRAM_USER_ID must be numeric")
+    return normalized
+
+
+def _optional_text(value: str | None) -> str | None:
+    if value is None or not value.strip():
+        return None
+    return value.strip()
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,14 +84,14 @@ class Settings:
     expected_hold_ttl_seconds: int
     availability_retry_seconds: int
     telegram_token_configured: bool
-    allowed_user_ids_configured: bool
+    administrator_configured: bool
     database_url_configured: bool
     telegram_bot_token: str | None = field(default=None, repr=False)
     database_url: str | None = field(default=None, repr=False)
     theatre_alias: str = "orel-teatr-svobodnoe-prostranstvo"
     hall_profiles_path: Path = Path("config/halls")
-    buyer_profile_path: Path | None = field(default=None, repr=False)
-    allowed_telegram_user_ids: frozenset[str] = frozenset()
+    administrator_telegram_user_id: str | None = field(default=None, repr=False)
+    quicktickets_payment_terminal_choice: str | None = None
 
     @classmethod
     def from_environ(cls, env: Mapping[str, str] | None = None) -> Settings:
@@ -94,15 +99,13 @@ class Settings:
         source = environ if env is None else env
         telegram_bot_token = source.get("TELEGRAM_BOT_TOKEN") or None
         database_url = source.get("DATABASE_URL") or None
-        allowed_telegram_user_ids = _allowed_user_ids(source.get("ALLOWED_TELEGRAM_USER_IDS"))
-        buyer_profile_path = _buyer_profile_path(source.get("BUYER_PROFILE_PATH"))
+        administrator_telegram_user_id = _telegram_user_id(source.get("ADMIN_TELEGRAM_USER_ID"))
+        payment_terminal_choice = _optional_text(source.get("QUICKTICKETS_PAYMENT_TERMINAL_CHOICE"))
         hall_profiles_path = _path(source.get("HALL_PROFILES_PATH"), default=Path("config/halls"))
         theatre_alias = source.get("THEATRE_ALIAS", "orel-teatr-svobodnoe-prostranstvo").strip()
         if not theatre_alias:
             raise ValueError("THEATRE_ALIAS must not be empty")
         booking_mode = _booking_mode(source.get("BOOKING_MODE"))
-        if booking_mode is BookingMode.LIVE and buyer_profile_path is None:
-            raise ValueError("BOOKING_MODE=live requires BUYER_PROFILE_PATH")
         return cls(
             booking_mode=booking_mode,
             poll_interval_seconds=_positive_int(
@@ -151,36 +154,29 @@ class Settings:
                 default=180,
             ),
             telegram_token_configured=telegram_bot_token is not None,
-            allowed_user_ids_configured=bool(allowed_telegram_user_ids),
+            administrator_configured=administrator_telegram_user_id is not None,
             database_url_configured=database_url is not None,
             telegram_bot_token=telegram_bot_token,
             database_url=database_url,
             theatre_alias=theatre_alias,
             hall_profiles_path=hall_profiles_path,
-            allowed_telegram_user_ids=allowed_telegram_user_ids,
-            buyer_profile_path=buyer_profile_path,
+            administrator_telegram_user_id=administrator_telegram_user_id,
+            quicktickets_payment_terminal_choice=payment_terminal_choice,
         )
 
     def validate_runtime(self) -> None:
         """Require concrete infrastructure while keeping all secret values private."""
         if self.telegram_bot_token is None:
             raise ValueError("runtime requires TELEGRAM_BOT_TOKEN")
-        if not self.allowed_telegram_user_ids:
-            raise ValueError("runtime requires ALLOWED_TELEGRAM_USER_IDS")
+        if self.administrator_telegram_user_id is None:
+            raise ValueError("runtime requires ADMIN_TELEGRAM_USER_ID")
         if self.database_url is None:
             raise ValueError("runtime requires DATABASE_URL")
         if not self.database_url.startswith("sqlite+aiosqlite:///"):
             raise ValueError("runtime DATABASE_URL must use sqlite+aiosqlite with a file path")
         if self.booking_mode is BookingMode.LIVE:
-            raise ValueError(
-                "BOOKING_MODE=live remains locked until the explicit live acceptance step"
-            )
-
-
-def _buyer_profile_path(value: str | None) -> Path | None:
-    if value is None or not value.strip():
-        return None
-    return Path(value).expanduser()
+            if self.quicktickets_payment_terminal_choice is None:
+                raise ValueError("live runtime requires QUICKTICKETS_PAYMENT_TERMINAL_CHOICE")
 
 
 def _path(value: str | None, *, default: Path) -> Path:

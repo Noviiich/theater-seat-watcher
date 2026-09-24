@@ -299,7 +299,6 @@ def _worker(factory: async_sessionmaker[AsyncSession], telegram: FakeTelegram) -
     return OutboxWorker(
         repository=SqlAlchemyOutboxRepository(factory),
         transport=telegram,
-        allowed_user_ids=frozenset({"10"}),
     )
 
 
@@ -412,7 +411,6 @@ async def _setup(
                     id="buyer",
                     telegram_user_id="10",
                     telegram_chat_id=telegram_chat_id,
-                    profile_ref=None,
                     created_at=now,
                 ),
                 SubscriptionModel(

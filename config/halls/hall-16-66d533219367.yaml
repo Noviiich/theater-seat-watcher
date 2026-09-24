@@ -1,0 +1,2029 @@
+profile_id: hall-16-66d533219367
+hall_id: '16'
+topology_fingerprint: 66d53321936760ef94a3ce5c61c32206ea18252b728a20e04800a75fa25f5403
+mode: manual_then_auto
+row_segments:
+- id: inferred:Балкон:1:0
+  block: Балкон
+  row: '1'
+  seat_ids:
+  - '5328'
+  - '5329'
+  - '5330'
+  - '5331'
+  - '5332'
+  - '5333'
+  - '5334'
+  - '5335'
+  - '5336'
+  - '5337'
+  - '5338'
+  - '5339'
+  - '5340'
+  - '5341'
+  - '5342'
+  - '5343'
+  - '5344'
+  - '5345'
+- id: inferred:Балкон:2:0
+  block: Балкон
+  row: '2'
+  seat_ids:
+  - '5346'
+  - '5347'
+  - '5348'
+  - '5349'
+  - '5350'
+  - '5351'
+  - '5352'
+  - '5353'
+  - '5354'
+  - '5355'
+  - '5356'
+  - '5357'
+  - '5358'
+  - '5359'
+  - '5360'
+  - '5361'
+  - '5362'
+- id: inferred:Балкон:3:0
+  block: Балкон
+  row: '3'
+  seat_ids:
+  - '5363'
+  - '5364'
+  - '5365'
+  - '5366'
+  - '5367'
+  - '5368'
+  - '5369'
+  - '5370'
+  - '5371'
+  - '5372'
+  - '5373'
+  - '5374'
+  - '5375'
+  - '5376'
+  - '5377'
+  - '5378'
+- id: inferred:Балкон:4:0
+  block: Балкон
+  row: '4'
+  seat_ids:
+  - '5379'
+  - '5380'
+  - '5381'
+  - '5382'
+  - '5383'
+  - '5384'
+  - '5385'
+  - '5386'
+  - '5387'
+  - '5388'
+  - '5389'
+  - '5390'
+  - '5391'
+  - '5392'
+- id: inferred:Балкон:5:0
+  block: Балкон
+  row: '5'
+  seat_ids:
+  - '5393'
+  - '5394'
+  - '5395'
+  - '5396'
+  - '5397'
+  - '5398'
+  - '5399'
+  - '5400'
+  - '5401'
+  - '5402'
+- id: inferred:Балкон:6:0
+  block: Балкон
+  row: '6'
+  seat_ids:
+  - '5403'
+  - '5404'
+  - '5405'
+  - '5406'
+  - '5407'
+  - '5408'
+  - '5409'
+  - '5410'
+  - '5411'
+  - '5412'
+  - '5413'
+  - '5414'
+  - '5415'
+- id: inferred:Партер:1:0
+  block: Партер
+  row: '1'
+  seat_ids:
+  - '5054'
+  - '5055'
+  - '5056'
+  - '5057'
+  - '5058'
+  - '5059'
+  - '5060'
+  - '5061'
+  - '5062'
+  - '5063'
+  - '5064'
+  - '5065'
+  - '5066'
+- id: inferred:Партер:10:0
+  block: Партер
+  row: '10'
+  seat_ids:
+  - '5225'
+  - '5226'
+  - '5227'
+  - '5228'
+  - '5229'
+  - '5230'
+  - '5231'
+  - '5232'
+  - '5233'
+  - '5234'
+  - '5235'
+  - '5236'
+  - '5237'
+  - '5238'
+  - '5239'
+  - '5240'
+  - '5241'
+  - '5242'
+  - '5243'
+  - '5244'
+  - '5245'
+- id: inferred:Партер:11:0
+  block: Партер
+  row: '11'
+  seat_ids:
+  - '5246'
+  - '5247'
+  - '5248'
+  - '5249'
+  - '5250'
+  - '5251'
+  - '5252'
+  - '5253'
+  - '5254'
+  - '5255'
+  - '5256'
+  - '5257'
+  - '5258'
+  - '5259'
+  - '5260'
+  - '5261'
+  - '5262'
+  - '5263'
+  - '5264'
+  - '5265'
+- id: inferred:Партер:12:0
+  block: Партер
+  row: '12'
+  seat_ids:
+  - '5266'
+  - '5267'
+  - '5268'
+  - '5269'
+  - '5270'
+  - '5271'
+  - '5272'
+  - '5273'
+  - '5274'
+  - '5275'
+  - '5276'
+  - '5277'
+  - '5278'
+  - '5279'
+  - '5280'
+  - '5281'
+  - '5282'
+  - '5283'
+  - '5284'
+- id: inferred:Партер:13:0
+  block: Партер
+  row: '13'
+  seat_ids:
+  - '5285'
+  - '5286'
+  - '5287'
+  - '5288'
+  - '5289'
+  - '5290'
+  - '5291'
+  - '5292'
+  - '5293'
+  - '5294'
+  - '5295'
+  - '5296'
+  - '5297'
+  - '5298'
+  - '5299'
+  - '5300'
+  - '5301'
+- id: inferred:Партер:14:0
+  block: Партер
+  row: '14'
+  seat_ids:
+  - '5302'
+  - '5303'
+  - '5304'
+  - '5305'
+  - '5306'
+  - '5307'
+  - '5308'
+  - '5309'
+  - '5310'
+  - '5311'
+  - '5312'
+  - '5313'
+  - '5314'
+  - '5315'
+  - '5316'
+- id: inferred:Партер:15:0
+  block: Партер
+  row: '15'
+  seat_ids:
+  - '5317'
+  - '5318'
+  - '5319'
+  - '5320'
+  - '5321'
+  - '5322'
+  - '5323'
+  - '5324'
+  - '5325'
+  - '5326'
+  - '5327'
+- id: inferred:Партер:2:0
+  block: Партер
+  row: '2'
+  seat_ids:
+  - '5067'
+  - '5068'
+  - '5069'
+  - '5070'
+  - '5071'
+  - '5072'
+  - '5073'
+  - '5074'
+  - '5075'
+  - '5076'
+  - '5077'
+  - '5078'
+  - '5079'
+  - '5080'
+  - '5081'
+  - '5082'
+- id: inferred:Партер:3:0
+  block: Партер
+  row: '3'
+  seat_ids:
+  - '5083'
+  - '5084'
+  - '5085'
+  - '5086'
+  - '5087'
+  - '5088'
+  - '5089'
+  - '5090'
+  - '5091'
+  - '5092'
+  - '5093'
+  - '5094'
+  - '5095'
+  - '5096'
+  - '5097'
+  - '5098'
+  - '5099'
+  - '5100'
+  - '5101'
+- id: inferred:Партер:4:0
+  block: Партер
+  row: '4'
+  seat_ids:
+  - '5102'
+  - '5103'
+  - '5104'
+  - '5105'
+  - '5106'
+  - '5107'
+- id: inferred:Партер:4:1
+  block: Партер
+  row: '4'
+  seat_ids:
+  - '5108'
+  - '5109'
+  - '5110'
+  - '5111'
+  - '5112'
+  - '5113'
+  - '5114'
+  - '5115'
+- id: inferred:Партер:5:0
+  block: Партер
+  row: '5'
+  seat_ids:
+  - '5116'
+  - '5117'
+  - '5118'
+  - '5119'
+  - '5120'
+  - '5121'
+  - '5122'
+  - '5123'
+  - '5124'
+  - '5125'
+  - '5126'
+  - '5127'
+  - '5128'
+  - '5129'
+  - '5130'
+  - '5131'
+  - '5132'
+  - '5133'
+  - '5134'
+  - '5135'
+  - '5136'
+- id: inferred:Партер:6:0
+  block: Партер
+  row: '6'
+  seat_ids:
+  - '5137'
+  - '5138'
+  - '5139'
+  - '5140'
+  - '5141'
+  - '5142'
+  - '5143'
+  - '5144'
+  - '5145'
+  - '5146'
+  - '5147'
+  - '5148'
+  - '5149'
+  - '5150'
+  - '5151'
+  - '5152'
+  - '5153'
+  - '5154'
+  - '5155'
+  - '5156'
+  - '5157'
+  - '5158'
+- id: inferred:Партер:7:0
+  block: Партер
+  row: '7'
+  seat_ids:
+  - '5159'
+  - '5160'
+  - '5161'
+  - '5162'
+  - '5163'
+  - '5164'
+  - '5165'
+  - '5166'
+  - '5167'
+  - '5168'
+  - '5169'
+  - '5170'
+  - '5171'
+  - '5172'
+  - '5173'
+  - '5174'
+  - '5175'
+  - '5176'
+  - '5177'
+  - '5178'
+  - '5179'
+  - '5180'
+- id: inferred:Партер:8:0
+  block: Партер
+  row: '8'
+  seat_ids:
+  - '5181'
+  - '5182'
+  - '5183'
+  - '5184'
+  - '5185'
+  - '5186'
+  - '5187'
+  - '5188'
+  - '5189'
+  - '5190'
+  - '5191'
+  - '5192'
+  - '5193'
+  - '5194'
+  - '5195'
+  - '5196'
+  - '5197'
+  - '5198'
+  - '5199'
+  - '5200'
+  - '5201'
+  - '5202'
+- id: inferred:Партер:9:0
+  block: Партер
+  row: '9'
+  seat_ids:
+  - '5203'
+  - '5204'
+  - '5205'
+  - '5206'
+  - '5207'
+  - '5208'
+  - '5209'
+  - '5210'
+  - '5211'
+  - '5212'
+  - '5213'
+  - '5214'
+  - '5215'
+  - '5216'
+  - '5217'
+  - '5218'
+  - '5219'
+  - '5220'
+  - '5221'
+  - '5222'
+  - '5223'
+  - '5224'
+preferred_groups:
+- id: stalls-r8-pair-1
+  priority: 0
+  seat_ids:
+  - '5191'
+  - '5192'
+- id: stalls-r8-pair-2
+  priority: 1
+  seat_ids:
+  - '5190'
+  - '5191'
+- id: stalls-r8-pair-3
+  priority: 2
+  seat_ids:
+  - '5192'
+  - '5193'
+- id: stalls-r8-pair-4
+  priority: 3
+  seat_ids:
+  - '5189'
+  - '5190'
+- id: stalls-r8-pair-5
+  priority: 4
+  seat_ids:
+  - '5193'
+  - '5194'
+- id: stalls-r8-pair-6
+  priority: 5
+  seat_ids:
+  - '5188'
+  - '5189'
+- id: stalls-r8-pair-7
+  priority: 6
+  seat_ids:
+  - '5194'
+  - '5195'
+- id: stalls-r8-pair-8
+  priority: 7
+  seat_ids:
+  - '5187'
+  - '5188'
+- id: stalls-r8-pair-9
+  priority: 8
+  seat_ids:
+  - '5195'
+  - '5196'
+- id: stalls-r7-pair-10
+  priority: 9
+  seat_ids:
+  - '5169'
+  - '5170'
+- id: stalls-r7-pair-11
+  priority: 10
+  seat_ids:
+  - '5168'
+  - '5169'
+- id: stalls-r7-pair-12
+  priority: 11
+  seat_ids:
+  - '5170'
+  - '5171'
+- id: stalls-r7-pair-13
+  priority: 12
+  seat_ids:
+  - '5167'
+  - '5168'
+- id: stalls-r7-pair-14
+  priority: 13
+  seat_ids:
+  - '5171'
+  - '5172'
+- id: stalls-r7-pair-15
+  priority: 14
+  seat_ids:
+  - '5166'
+  - '5167'
+- id: stalls-r7-pair-16
+  priority: 15
+  seat_ids:
+  - '5172'
+  - '5173'
+- id: stalls-r7-pair-17
+  priority: 16
+  seat_ids:
+  - '5165'
+  - '5166'
+- id: stalls-r7-pair-18
+  priority: 17
+  seat_ids:
+  - '5173'
+  - '5174'
+- id: stalls-r9-pair-19
+  priority: 18
+  seat_ids:
+  - '5213'
+  - '5214'
+- id: stalls-r9-pair-20
+  priority: 19
+  seat_ids:
+  - '5212'
+  - '5213'
+- id: stalls-r9-pair-21
+  priority: 20
+  seat_ids:
+  - '5214'
+  - '5215'
+- id: stalls-r9-pair-22
+  priority: 21
+  seat_ids:
+  - '5211'
+  - '5212'
+- id: stalls-r9-pair-23
+  priority: 22
+  seat_ids:
+  - '5215'
+  - '5216'
+- id: stalls-r9-pair-24
+  priority: 23
+  seat_ids:
+  - '5210'
+  - '5211'
+- id: stalls-r9-pair-25
+  priority: 24
+  seat_ids:
+  - '5216'
+  - '5217'
+- id: stalls-r9-pair-26
+  priority: 25
+  seat_ids:
+  - '5209'
+  - '5210'
+- id: stalls-r9-pair-27
+  priority: 26
+  seat_ids:
+  - '5217'
+  - '5218'
+- id: stalls-r6-pair-28
+  priority: 27
+  seat_ids:
+  - '5147'
+  - '5148'
+- id: stalls-r6-pair-29
+  priority: 28
+  seat_ids:
+  - '5146'
+  - '5147'
+- id: stalls-r6-pair-30
+  priority: 29
+  seat_ids:
+  - '5148'
+  - '5149'
+- id: stalls-r6-pair-31
+  priority: 30
+  seat_ids:
+  - '5145'
+  - '5146'
+- id: stalls-r6-pair-32
+  priority: 31
+  seat_ids:
+  - '5149'
+  - '5150'
+- id: stalls-r6-pair-33
+  priority: 32
+  seat_ids:
+  - '5144'
+  - '5145'
+- id: stalls-r6-pair-34
+  priority: 33
+  seat_ids:
+  - '5150'
+  - '5151'
+- id: stalls-r6-pair-35
+  priority: 34
+  seat_ids:
+  - '5143'
+  - '5144'
+- id: stalls-r6-pair-36
+  priority: 35
+  seat_ids:
+  - '5151'
+  - '5152'
+- id: stalls-r10-pair-37
+  priority: 36
+  seat_ids:
+  - '5234'
+  - '5235'
+- id: stalls-r10-pair-38
+  priority: 37
+  seat_ids:
+  - '5235'
+  - '5236'
+- id: stalls-r10-pair-39
+  priority: 38
+  seat_ids:
+  - '5233'
+  - '5234'
+- id: stalls-r10-pair-40
+  priority: 39
+  seat_ids:
+  - '5236'
+  - '5237'
+- id: stalls-r10-pair-41
+  priority: 40
+  seat_ids:
+  - '5232'
+  - '5233'
+- id: stalls-r10-pair-42
+  priority: 41
+  seat_ids:
+  - '5237'
+  - '5238'
+- id: stalls-r10-pair-43
+  priority: 42
+  seat_ids:
+  - '5231'
+  - '5232'
+- id: stalls-r10-pair-44
+  priority: 43
+  seat_ids:
+  - '5238'
+  - '5239'
+- id: stalls-r11-pair-45
+  priority: 44
+  seat_ids:
+  - '5255'
+  - '5256'
+- id: stalls-r11-pair-46
+  priority: 45
+  seat_ids:
+  - '5254'
+  - '5255'
+- id: stalls-r11-pair-47
+  priority: 46
+  seat_ids:
+  - '5256'
+  - '5257'
+- id: stalls-r11-pair-48
+  priority: 47
+  seat_ids:
+  - '5253'
+  - '5254'
+- id: stalls-r11-pair-49
+  priority: 48
+  seat_ids:
+  - '5257'
+  - '5258'
+- id: stalls-r11-pair-50
+  priority: 49
+  seat_ids:
+  - '5252'
+  - '5253'
+- id: stalls-r11-pair-51
+  priority: 50
+  seat_ids:
+  - '5258'
+  - '5259'
+- id: stalls-r12-pair-52
+  priority: 51
+  seat_ids:
+  - '5274'
+  - '5275'
+- id: stalls-r12-pair-53
+  priority: 52
+  seat_ids:
+  - '5275'
+  - '5276'
+- id: stalls-r12-pair-54
+  priority: 53
+  seat_ids:
+  - '5273'
+  - '5274'
+- id: stalls-r12-pair-55
+  priority: 54
+  seat_ids:
+  - '5276'
+  - '5277'
+- id: stalls-r12-pair-56
+  priority: 55
+  seat_ids:
+  - '5272'
+  - '5273'
+- id: stalls-r12-pair-57
+  priority: 56
+  seat_ids:
+  - '5277'
+  - '5278'
+- id: stalls-r12-pair-58
+  priority: 57
+  seat_ids:
+  - '5271'
+  - '5272'
+- id: stalls-r12-pair-59
+  priority: 58
+  seat_ids:
+  - '5278'
+  - '5279'
+- id: stalls-r13-pair-60
+  priority: 59
+  seat_ids:
+  - '5292'
+  - '5293'
+- id: stalls-r13-pair-61
+  priority: 60
+  seat_ids:
+  - '5293'
+  - '5294'
+- id: stalls-r13-pair-62
+  priority: 61
+  seat_ids:
+  - '5291'
+  - '5292'
+- id: stalls-r13-pair-63
+  priority: 62
+  seat_ids:
+  - '5294'
+  - '5295'
+- id: stalls-r13-pair-64
+  priority: 63
+  seat_ids:
+  - '5290'
+  - '5291'
+- id: stalls-r13-pair-65
+  priority: 64
+  seat_ids:
+  - '5295'
+  - '5296'
+- id: stalls-r13-pair-66
+  priority: 65
+  seat_ids:
+  - '5289'
+  - '5290'
+- id: stalls-r13-pair-67
+  priority: 66
+  seat_ids:
+  - '5296'
+  - '5297'
+- id: stalls-r14-pair-68
+  priority: 67
+  seat_ids:
+  - '5308'
+  - '5309'
+- id: stalls-r14-pair-69
+  priority: 68
+  seat_ids:
+  - '5309'
+  - '5310'
+- id: stalls-r14-pair-70
+  priority: 69
+  seat_ids:
+  - '5307'
+  - '5308'
+- id: stalls-r14-pair-71
+  priority: 70
+  seat_ids:
+  - '5310'
+  - '5311'
+- id: stalls-r14-pair-72
+  priority: 71
+  seat_ids:
+  - '5306'
+  - '5307'
+- id: stalls-r14-pair-73
+  priority: 72
+  seat_ids:
+  - '5311'
+  - '5312'
+- id: stalls-r14-pair-74
+  priority: 73
+  seat_ids:
+  - '5305'
+  - '5306'
+- id: stalls-r14-pair-75
+  priority: 74
+  seat_ids:
+  - '5312'
+  - '5313'
+- id: stalls-r15-pair-76
+  priority: 75
+  seat_ids:
+  - '5321'
+  - '5322'
+- id: stalls-r15-pair-77
+  priority: 76
+  seat_ids:
+  - '5322'
+  - '5323'
+- id: stalls-r15-pair-78
+  priority: 77
+  seat_ids:
+  - '5320'
+  - '5321'
+- id: stalls-r15-pair-79
+  priority: 78
+  seat_ids:
+  - '5323'
+  - '5324'
+- id: stalls-r15-pair-80
+  priority: 79
+  seat_ids:
+  - '5319'
+  - '5320'
+- id: stalls-r15-pair-81
+  priority: 80
+  seat_ids:
+  - '5324'
+  - '5325'
+- id: stalls-r5-pair-82
+  priority: 81
+  seat_ids:
+  - '5125'
+  - '5126'
+- id: stalls-r5-pair-83
+  priority: 82
+  seat_ids:
+  - '5126'
+  - '5127'
+- id: stalls-r5-pair-84
+  priority: 83
+  seat_ids:
+  - '5124'
+  - '5125'
+- id: stalls-r5-pair-85
+  priority: 84
+  seat_ids:
+  - '5127'
+  - '5128'
+- id: stalls-r5-pair-86
+  priority: 85
+  seat_ids:
+  - '5123'
+  - '5124'
+- id: stalls-r5-pair-87
+  priority: 86
+  seat_ids:
+  - '5128'
+  - '5129'
+- id: stalls-r5-pair-88
+  priority: 87
+  seat_ids:
+  - '5122'
+  - '5123'
+- id: stalls-r5-pair-89
+  priority: 88
+  seat_ids:
+  - '5129'
+  - '5130'
+- id: stalls-r4-pair-90
+  priority: 89
+  seat_ids:
+  - '5111'
+  - '5112'
+- id: stalls-r3-pair-91
+  priority: 90
+  seat_ids:
+  - '5091'
+  - '5092'
+- id: stalls-r3-pair-92
+  priority: 91
+  seat_ids:
+  - '5092'
+  - '5093'
+- id: stalls-r3-pair-93
+  priority: 92
+  seat_ids:
+  - '5090'
+  - '5091'
+- id: stalls-r3-pair-94
+  priority: 93
+  seat_ids:
+  - '5093'
+  - '5094'
+- id: stalls-r3-pair-95
+  priority: 94
+  seat_ids:
+  - '5089'
+  - '5090'
+- id: stalls-r3-pair-96
+  priority: 95
+  seat_ids:
+  - '5094'
+  - '5095'
+- id: stalls-r3-pair-97
+  priority: 96
+  seat_ids:
+  - '5088'
+  - '5089'
+- id: stalls-r3-pair-98
+  priority: 97
+  seat_ids:
+  - '5095'
+  - '5096'
+- id: stalls-r3-pair-99
+  priority: 98
+  seat_ids:
+  - '5087'
+  - '5088'
+- id: stalls-r3-pair-100
+  priority: 99
+  seat_ids:
+  - '5096'
+  - '5097'
+- id: stalls-r2-pair-101
+  priority: 100
+  seat_ids:
+  - '5074'
+  - '5075'
+- id: stalls-r2-pair-102
+  priority: 101
+  seat_ids:
+  - '5073'
+  - '5074'
+- id: stalls-r2-pair-103
+  priority: 102
+  seat_ids:
+  - '5075'
+  - '5076'
+- id: stalls-r2-pair-104
+  priority: 103
+  seat_ids:
+  - '5072'
+  - '5073'
+- id: stalls-r2-pair-105
+  priority: 104
+  seat_ids:
+  - '5076'
+  - '5077'
+- id: stalls-r2-pair-106
+  priority: 105
+  seat_ids:
+  - '5071'
+  - '5072'
+- id: stalls-r2-pair-107
+  priority: 106
+  seat_ids:
+  - '5077'
+  - '5078'
+- id: stalls-r2-pair-108
+  priority: 107
+  seat_ids:
+  - '5070'
+  - '5071'
+- id: stalls-r2-pair-109
+  priority: 108
+  seat_ids:
+  - '5078'
+  - '5079'
+- id: stalls-r1-pair-110
+  priority: 109
+  seat_ids:
+  - '5059'
+  - '5060'
+- id: stalls-r1-pair-111
+  priority: 110
+  seat_ids:
+  - '5060'
+  - '5061'
+- id: stalls-r1-pair-112
+  priority: 111
+  seat_ids:
+  - '5058'
+  - '5059'
+- id: stalls-r1-pair-113
+  priority: 112
+  seat_ids:
+  - '5061'
+  - '5062'
+- id: stalls-r1-pair-114
+  priority: 113
+  seat_ids:
+  - '5057'
+  - '5058'
+- id: stalls-r1-pair-115
+  priority: 114
+  seat_ids:
+  - '5062'
+  - '5063'
+- id: stalls-r1-pair-116
+  priority: 115
+  seat_ids:
+  - '5056'
+  - '5057'
+- id: stalls-r1-pair-117
+  priority: 116
+  seat_ids:
+  - '5063'
+  - '5064'
+- id: stalls-r8-pair-118
+  priority: 117
+  seat_ids:
+  - '5181'
+  - '5182'
+- id: stalls-r8-pair-119
+  priority: 118
+  seat_ids:
+  - '5201'
+  - '5202'
+- id: stalls-r8-pair-120
+  priority: 119
+  seat_ids:
+  - '5182'
+  - '5183'
+- id: stalls-r8-pair-121
+  priority: 120
+  seat_ids:
+  - '5200'
+  - '5201'
+- id: stalls-r8-pair-122
+  priority: 121
+  seat_ids:
+  - '5183'
+  - '5184'
+- id: stalls-r8-pair-123
+  priority: 122
+  seat_ids:
+  - '5199'
+  - '5200'
+- id: stalls-r8-pair-124
+  priority: 123
+  seat_ids:
+  - '5184'
+  - '5185'
+- id: stalls-r8-pair-125
+  priority: 124
+  seat_ids:
+  - '5198'
+  - '5199'
+- id: stalls-r8-pair-126
+  priority: 125
+  seat_ids:
+  - '5185'
+  - '5186'
+- id: stalls-r8-pair-127
+  priority: 126
+  seat_ids:
+  - '5197'
+  - '5198'
+- id: stalls-r7-pair-128
+  priority: 127
+  seat_ids:
+  - '5159'
+  - '5160'
+- id: stalls-r7-pair-129
+  priority: 128
+  seat_ids:
+  - '5179'
+  - '5180'
+- id: stalls-r7-pair-130
+  priority: 129
+  seat_ids:
+  - '5160'
+  - '5161'
+- id: stalls-r7-pair-131
+  priority: 130
+  seat_ids:
+  - '5178'
+  - '5179'
+- id: stalls-r7-pair-132
+  priority: 131
+  seat_ids:
+  - '5161'
+  - '5162'
+- id: stalls-r7-pair-133
+  priority: 132
+  seat_ids:
+  - '5177'
+  - '5178'
+- id: stalls-r7-pair-134
+  priority: 133
+  seat_ids:
+  - '5162'
+  - '5163'
+- id: stalls-r7-pair-135
+  priority: 134
+  seat_ids:
+  - '5176'
+  - '5177'
+- id: stalls-r7-pair-136
+  priority: 135
+  seat_ids:
+  - '5163'
+  - '5164'
+- id: stalls-r7-pair-137
+  priority: 136
+  seat_ids:
+  - '5175'
+  - '5176'
+- id: stalls-r9-pair-138
+  priority: 137
+  seat_ids:
+  - '5203'
+  - '5204'
+- id: stalls-r9-pair-139
+  priority: 138
+  seat_ids:
+  - '5223'
+  - '5224'
+- id: stalls-r9-pair-140
+  priority: 139
+  seat_ids:
+  - '5204'
+  - '5205'
+- id: stalls-r9-pair-141
+  priority: 140
+  seat_ids:
+  - '5222'
+  - '5223'
+- id: stalls-r9-pair-142
+  priority: 141
+  seat_ids:
+  - '5205'
+  - '5206'
+- id: stalls-r9-pair-143
+  priority: 142
+  seat_ids:
+  - '5221'
+  - '5222'
+- id: stalls-r9-pair-144
+  priority: 143
+  seat_ids:
+  - '5206'
+  - '5207'
+- id: stalls-r9-pair-145
+  priority: 144
+  seat_ids:
+  - '5220'
+  - '5221'
+- id: stalls-r9-pair-146
+  priority: 145
+  seat_ids:
+  - '5207'
+  - '5208'
+- id: stalls-r9-pair-147
+  priority: 146
+  seat_ids:
+  - '5219'
+  - '5220'
+- id: stalls-r6-pair-148
+  priority: 147
+  seat_ids:
+  - '5137'
+  - '5138'
+- id: stalls-r6-pair-149
+  priority: 148
+  seat_ids:
+  - '5157'
+  - '5158'
+- id: stalls-r6-pair-150
+  priority: 149
+  seat_ids:
+  - '5138'
+  - '5139'
+- id: stalls-r6-pair-151
+  priority: 150
+  seat_ids:
+  - '5156'
+  - '5157'
+- id: stalls-r6-pair-152
+  priority: 151
+  seat_ids:
+  - '5139'
+  - '5140'
+- id: stalls-r6-pair-153
+  priority: 152
+  seat_ids:
+  - '5155'
+  - '5156'
+- id: stalls-r6-pair-154
+  priority: 153
+  seat_ids:
+  - '5140'
+  - '5141'
+- id: stalls-r6-pair-155
+  priority: 154
+  seat_ids:
+  - '5154'
+  - '5155'
+- id: stalls-r6-pair-156
+  priority: 155
+  seat_ids:
+  - '5141'
+  - '5142'
+- id: stalls-r6-pair-157
+  priority: 156
+  seat_ids:
+  - '5153'
+  - '5154'
+- id: stalls-r10-pair-158
+  priority: 157
+  seat_ids:
+  - '5225'
+  - '5226'
+- id: stalls-r10-pair-159
+  priority: 158
+  seat_ids:
+  - '5244'
+  - '5245'
+- id: stalls-r10-pair-160
+  priority: 159
+  seat_ids:
+  - '5226'
+  - '5227'
+- id: stalls-r10-pair-161
+  priority: 160
+  seat_ids:
+  - '5243'
+  - '5244'
+- id: stalls-r10-pair-162
+  priority: 161
+  seat_ids:
+  - '5227'
+  - '5228'
+- id: stalls-r10-pair-163
+  priority: 162
+  seat_ids:
+  - '5242'
+  - '5243'
+- id: stalls-r10-pair-164
+  priority: 163
+  seat_ids:
+  - '5228'
+  - '5229'
+- id: stalls-r10-pair-165
+  priority: 164
+  seat_ids:
+  - '5241'
+  - '5242'
+- id: stalls-r10-pair-166
+  priority: 165
+  seat_ids:
+  - '5229'
+  - '5230'
+- id: stalls-r10-pair-167
+  priority: 166
+  seat_ids:
+  - '5240'
+  - '5241'
+- id: stalls-r11-pair-168
+  priority: 167
+  seat_ids:
+  - '5246'
+  - '5247'
+- id: stalls-r11-pair-169
+  priority: 168
+  seat_ids:
+  - '5264'
+  - '5265'
+- id: stalls-r11-pair-170
+  priority: 169
+  seat_ids:
+  - '5247'
+  - '5248'
+- id: stalls-r11-pair-171
+  priority: 170
+  seat_ids:
+  - '5263'
+  - '5264'
+- id: stalls-r11-pair-172
+  priority: 171
+  seat_ids:
+  - '5248'
+  - '5249'
+- id: stalls-r11-pair-173
+  priority: 172
+  seat_ids:
+  - '5262'
+  - '5263'
+- id: stalls-r11-pair-174
+  priority: 173
+  seat_ids:
+  - '5249'
+  - '5250'
+- id: stalls-r11-pair-175
+  priority: 174
+  seat_ids:
+  - '5261'
+  - '5262'
+- id: stalls-r11-pair-176
+  priority: 175
+  seat_ids:
+  - '5250'
+  - '5251'
+- id: stalls-r11-pair-177
+  priority: 176
+  seat_ids:
+  - '5260'
+  - '5261'
+- id: stalls-r12-pair-178
+  priority: 177
+  seat_ids:
+  - '5266'
+  - '5267'
+- id: stalls-r12-pair-179
+  priority: 178
+  seat_ids:
+  - '5283'
+  - '5284'
+- id: stalls-r12-pair-180
+  priority: 179
+  seat_ids:
+  - '5267'
+  - '5268'
+- id: stalls-r12-pair-181
+  priority: 180
+  seat_ids:
+  - '5282'
+  - '5283'
+- id: stalls-r12-pair-182
+  priority: 181
+  seat_ids:
+  - '5268'
+  - '5269'
+- id: stalls-r12-pair-183
+  priority: 182
+  seat_ids:
+  - '5281'
+  - '5282'
+- id: stalls-r12-pair-184
+  priority: 183
+  seat_ids:
+  - '5269'
+  - '5270'
+- id: stalls-r12-pair-185
+  priority: 184
+  seat_ids:
+  - '5280'
+  - '5281'
+- id: stalls-r13-pair-186
+  priority: 185
+  seat_ids:
+  - '5285'
+  - '5286'
+- id: stalls-r13-pair-187
+  priority: 186
+  seat_ids:
+  - '5300'
+  - '5301'
+- id: stalls-r13-pair-188
+  priority: 187
+  seat_ids:
+  - '5286'
+  - '5287'
+- id: stalls-r13-pair-189
+  priority: 188
+  seat_ids:
+  - '5299'
+  - '5300'
+- id: stalls-r13-pair-190
+  priority: 189
+  seat_ids:
+  - '5287'
+  - '5288'
+- id: stalls-r13-pair-191
+  priority: 190
+  seat_ids:
+  - '5298'
+  - '5299'
+- id: stalls-r14-pair-192
+  priority: 191
+  seat_ids:
+  - '5302'
+  - '5303'
+- id: stalls-r14-pair-193
+  priority: 192
+  seat_ids:
+  - '5315'
+  - '5316'
+- id: stalls-r14-pair-194
+  priority: 193
+  seat_ids:
+  - '5303'
+  - '5304'
+- id: stalls-r14-pair-195
+  priority: 194
+  seat_ids:
+  - '5314'
+  - '5315'
+- id: stalls-r15-pair-196
+  priority: 195
+  seat_ids:
+  - '5317'
+  - '5318'
+- id: stalls-r15-pair-197
+  priority: 196
+  seat_ids:
+  - '5326'
+  - '5327'
+- id: stalls-r5-pair-198
+  priority: 197
+  seat_ids:
+  - '5116'
+  - '5117'
+- id: stalls-r5-pair-199
+  priority: 198
+  seat_ids:
+  - '5135'
+  - '5136'
+- id: stalls-r5-pair-200
+  priority: 199
+  seat_ids:
+  - '5117'
+  - '5118'
+- id: stalls-r5-pair-201
+  priority: 200
+  seat_ids:
+  - '5134'
+  - '5135'
+- id: stalls-r5-pair-202
+  priority: 201
+  seat_ids:
+  - '5118'
+  - '5119'
+- id: stalls-r5-pair-203
+  priority: 202
+  seat_ids:
+  - '5133'
+  - '5134'
+- id: stalls-r5-pair-204
+  priority: 203
+  seat_ids:
+  - '5119'
+  - '5120'
+- id: stalls-r5-pair-205
+  priority: 204
+  seat_ids:
+  - '5132'
+  - '5133'
+- id: stalls-r5-pair-206
+  priority: 205
+  seat_ids:
+  - '5120'
+  - '5121'
+- id: stalls-r5-pair-207
+  priority: 206
+  seat_ids:
+  - '5131'
+  - '5132'
+- id: stalls-r4-pair-208
+  priority: 207
+  seat_ids:
+  - '5108'
+  - '5109'
+- id: stalls-r4-pair-209
+  priority: 208
+  seat_ids:
+  - '5114'
+  - '5115'
+- id: stalls-r4-pair-210
+  priority: 209
+  seat_ids:
+  - '5109'
+  - '5110'
+- id: stalls-r4-pair-211
+  priority: 210
+  seat_ids:
+  - '5113'
+  - '5114'
+- id: stalls-r3-pair-212
+  priority: 211
+  seat_ids:
+  - '5083'
+  - '5084'
+- id: stalls-r3-pair-213
+  priority: 212
+  seat_ids:
+  - '5100'
+  - '5101'
+- id: stalls-r3-pair-214
+  priority: 213
+  seat_ids:
+  - '5084'
+  - '5085'
+- id: stalls-r3-pair-215
+  priority: 214
+  seat_ids:
+  - '5099'
+  - '5100'
+- id: stalls-r3-pair-216
+  priority: 215
+  seat_ids:
+  - '5085'
+  - '5086'
+- id: stalls-r3-pair-217
+  priority: 216
+  seat_ids:
+  - '5098'
+  - '5099'
+- id: stalls-r2-pair-218
+  priority: 217
+  seat_ids:
+  - '5067'
+  - '5068'
+- id: stalls-r2-pair-219
+  priority: 218
+  seat_ids:
+  - '5081'
+  - '5082'
+- id: stalls-r2-pair-220
+  priority: 219
+  seat_ids:
+  - '5068'
+  - '5069'
+- id: stalls-r2-pair-221
+  priority: 220
+  seat_ids:
+  - '5080'
+  - '5081'
+- id: stalls-r1-pair-222
+  priority: 221
+  seat_ids:
+  - '5054'
+  - '5055'
+- id: stalls-r1-pair-223
+  priority: 222
+  seat_ids:
+  - '5065'
+  - '5066'
+- id: stalls-r1-pair-224
+  priority: 223
+  seat_ids:
+  - '5336'
+  - '5337'
+- id: stalls-r1-pair-225
+  priority: 224
+  seat_ids:
+  - '5335'
+  - '5336'
+- id: stalls-r2-pair-226
+  priority: 225
+  seat_ids:
+  - '5353'
+  - '5354'
+- id: stalls-r2-pair-227
+  priority: 226
+  seat_ids:
+  - '5354'
+  - '5355'
+- id: stalls-r3-pair-228
+  priority: 227
+  seat_ids:
+  - '5370'
+  - '5371'
+- id: stalls-r3-pair-229
+  priority: 228
+  seat_ids:
+  - '5369'
+  - '5370'
+- id: stalls-r4-pair-230
+  priority: 229
+  seat_ids:
+  - '5385'
+  - '5386'
+- id: stalls-r4-pair-231
+  priority: 230
+  seat_ids:
+  - '5384'
+  - '5385'
+- id: stalls-r5-pair-232
+  priority: 231
+  seat_ids:
+  - '5397'
+  - '5398'
+- id: stalls-r5-pair-233
+  priority: 232
+  seat_ids:
+  - '5396'
+  - '5397'
+- id: stalls-r6-pair-234
+  priority: 233
+  seat_ids:
+  - '5408'
+  - '5409'
+- id: stalls-r6-pair-235
+  priority: 234
+  seat_ids:
+  - '5409'
+  - '5410'
+- id: stalls-r1-pair-236
+  priority: 235
+  seat_ids:
+  - '5328'
+  - '5329'
+- id: stalls-r1-pair-237
+  priority: 236
+  seat_ids:
+  - '5344'
+  - '5345'
+- id: stalls-r1-pair-238
+  priority: 237
+  seat_ids:
+  - '5329'
+  - '5330'
+- id: stalls-r1-pair-239
+  priority: 238
+  seat_ids:
+  - '5343'
+  - '5344'
+- id: stalls-r1-pair-240
+  priority: 239
+  seat_ids:
+  - '5330'
+  - '5331'
+- id: stalls-r1-pair-241
+  priority: 240
+  seat_ids:
+  - '5342'
+  - '5343'
+- id: stalls-r1-pair-242
+  priority: 241
+  seat_ids:
+  - '5331'
+  - '5332'
+- id: stalls-r1-pair-243
+  priority: 242
+  seat_ids:
+  - '5341'
+  - '5342'
+- id: stalls-r1-pair-244
+  priority: 243
+  seat_ids:
+  - '5332'
+  - '5333'
+- id: stalls-r1-pair-245
+  priority: 244
+  seat_ids:
+  - '5340'
+  - '5341'
+- id: stalls-r1-pair-246
+  priority: 245
+  seat_ids:
+  - '5333'
+  - '5334'
+- id: stalls-r1-pair-247
+  priority: 246
+  seat_ids:
+  - '5339'
+  - '5340'
+- id: stalls-r1-pair-248
+  priority: 247
+  seat_ids:
+  - '5334'
+  - '5335'
+- id: stalls-r1-pair-249
+  priority: 248
+  seat_ids:
+  - '5338'
+  - '5339'
+- id: stalls-r1-pair-250
+  priority: 249
+  seat_ids:
+  - '5337'
+  - '5338'
+- id: stalls-r2-pair-251
+  priority: 250
+  seat_ids:
+  - '5346'
+  - '5347'
+- id: stalls-r2-pair-252
+  priority: 251
+  seat_ids:
+  - '5361'
+  - '5362'
+- id: stalls-r2-pair-253
+  priority: 252
+  seat_ids:
+  - '5347'
+  - '5348'
+- id: stalls-r2-pair-254
+  priority: 253
+  seat_ids:
+  - '5360'
+  - '5361'
+- id: stalls-r2-pair-255
+  priority: 254
+  seat_ids:
+  - '5348'
+  - '5349'
+- id: stalls-r2-pair-256
+  priority: 255
+  seat_ids:
+  - '5359'
+  - '5360'
+- id: stalls-r2-pair-257
+  priority: 256
+  seat_ids:
+  - '5349'
+  - '5350'
+- id: stalls-r2-pair-258
+  priority: 257
+  seat_ids:
+  - '5358'
+  - '5359'
+- id: stalls-r2-pair-259
+  priority: 258
+  seat_ids:
+  - '5350'
+  - '5351'
+- id: stalls-r2-pair-260
+  priority: 259
+  seat_ids:
+  - '5357'
+  - '5358'
+- id: stalls-r2-pair-261
+  priority: 260
+  seat_ids:
+  - '5351'
+  - '5352'
+- id: stalls-r2-pair-262
+  priority: 261
+  seat_ids:
+  - '5356'
+  - '5357'
+- id: stalls-r2-pair-263
+  priority: 262
+  seat_ids:
+  - '5352'
+  - '5353'
+- id: stalls-r2-pair-264
+  priority: 263
+  seat_ids:
+  - '5355'
+  - '5356'
+- id: stalls-r3-pair-265
+  priority: 264
+  seat_ids:
+  - '5363'
+  - '5364'
+- id: stalls-r3-pair-266
+  priority: 265
+  seat_ids:
+  - '5377'
+  - '5378'
+- id: stalls-r3-pair-267
+  priority: 266
+  seat_ids:
+  - '5364'
+  - '5365'
+- id: stalls-r3-pair-268
+  priority: 267
+  seat_ids:
+  - '5376'
+  - '5377'
+- id: stalls-r3-pair-269
+  priority: 268
+  seat_ids:
+  - '5365'
+  - '5366'
+- id: stalls-r3-pair-270
+  priority: 269
+  seat_ids:
+  - '5375'
+  - '5376'
+- id: stalls-r3-pair-271
+  priority: 270
+  seat_ids:
+  - '5366'
+  - '5367'
+- id: stalls-r3-pair-272
+  priority: 271
+  seat_ids:
+  - '5374'
+  - '5375'
+- id: stalls-r3-pair-273
+  priority: 272
+  seat_ids:
+  - '5367'
+  - '5368'
+- id: stalls-r3-pair-274
+  priority: 273
+  seat_ids:
+  - '5373'
+  - '5374'
+- id: stalls-r3-pair-275
+  priority: 274
+  seat_ids:
+  - '5368'
+  - '5369'
+- id: stalls-r3-pair-276
+  priority: 275
+  seat_ids:
+  - '5372'
+  - '5373'
+- id: stalls-r3-pair-277
+  priority: 276
+  seat_ids:
+  - '5371'
+  - '5372'
+- id: stalls-r4-pair-278
+  priority: 277
+  seat_ids:
+  - '5379'
+  - '5380'
+- id: stalls-r4-pair-279
+  priority: 278
+  seat_ids:
+  - '5391'
+  - '5392'
+- id: stalls-r4-pair-280
+  priority: 279
+  seat_ids:
+  - '5380'
+  - '5381'
+- id: stalls-r4-pair-281
+  priority: 280
+  seat_ids:
+  - '5390'
+  - '5391'
+- id: stalls-r4-pair-282
+  priority: 281
+  seat_ids:
+  - '5381'
+  - '5382'
+- id: stalls-r4-pair-283
+  priority: 282
+  seat_ids:
+  - '5389'
+  - '5390'
+- id: stalls-r4-pair-284
+  priority: 283
+  seat_ids:
+  - '5382'
+  - '5383'
+- id: stalls-r4-pair-285
+  priority: 284
+  seat_ids:
+  - '5388'
+  - '5389'
+- id: stalls-r4-pair-286
+  priority: 285
+  seat_ids:
+  - '5383'
+  - '5384'
+- id: stalls-r4-pair-287
+  priority: 286
+  seat_ids:
+  - '5387'
+  - '5388'
+- id: stalls-r4-pair-288
+  priority: 287
+  seat_ids:
+  - '5386'
+  - '5387'
+- id: stalls-r5-pair-289
+  priority: 288
+  seat_ids:
+  - '5393'
+  - '5394'
+- id: stalls-r5-pair-290
+  priority: 289
+  seat_ids:
+  - '5401'
+  - '5402'
+- id: stalls-r5-pair-291
+  priority: 290
+  seat_ids:
+  - '5394'
+  - '5395'
+- id: stalls-r5-pair-292
+  priority: 291
+  seat_ids:
+  - '5400'
+  - '5401'
+- id: stalls-r5-pair-293
+  priority: 292
+  seat_ids:
+  - '5395'
+  - '5396'
+- id: stalls-r5-pair-294
+  priority: 293
+  seat_ids:
+  - '5399'
+  - '5400'
+- id: stalls-r5-pair-295
+  priority: 294
+  seat_ids:
+  - '5398'
+  - '5399'
+- id: stalls-r6-pair-296
+  priority: 295
+  seat_ids:
+  - '5403'
+  - '5404'
+- id: stalls-r6-pair-297
+  priority: 296
+  seat_ids:
+  - '5414'
+  - '5415'
+- id: stalls-r6-pair-298
+  priority: 297
+  seat_ids:
+  - '5404'
+  - '5405'
+- id: stalls-r6-pair-299
+  priority: 298
+  seat_ids:
+  - '5413'
+  - '5414'
+- id: stalls-r6-pair-300
+  priority: 299
+  seat_ids:
+  - '5405'
+  - '5406'
+- id: stalls-r6-pair-301
+  priority: 300
+  seat_ids:
+  - '5412'
+  - '5413'
+- id: stalls-r6-pair-302
+  priority: 301
+  seat_ids:
+  - '5406'
+  - '5407'
+- id: stalls-r6-pair-303
+  priority: 302
+  seat_ids:
+  - '5411'
+  - '5412'
+- id: stalls-r6-pair-304
+  priority: 303
+  seat_ids:
+  - '5407'
+  - '5408'
+- id: stalls-r6-pair-305
+  priority: 304
+  seat_ids:
+  - '5410'
+  - '5411'
+selection:
+  row_quality:
+    '8': '1.00'
+    '7': '0.96'
+    '9': '0.94'
+    '6': '0.88'
+    '10': '0.86'
+    '5': '0.80'
+    '11': '0.78'
+    '4': '0.72'
+    '12': '0.70'
+    '3': '0.64'
+    '13': '0.62'
+    '2': '0.56'
+    '14': '0.54'
+    '1': '0.48'
+    '15': '0.46'
+  weights:
+    row: '0.35'
+    center: '0.65'
+    price: '0.00'
+    aisle: '0.00'
+  min_quality: '0.00'
+  view_axis_x: '315'
+  normalization_width: '1'
+  aisle_quality:
+    inferred:Балкон:1:0: '1.00'
+    inferred:Балкон:2:0: '1.00'
+    inferred:Балкон:3:0: '1.00'
+    inferred:Балкон:4:0: '1.00'
+    inferred:Балкон:5:0: '1.00'
+    inferred:Балкон:6:0: '1.00'
+    inferred:Партер:1:0: '1.00'
+    inferred:Партер:10:0: '1.00'
+    inferred:Партер:11:0: '1.00'
+    inferred:Партер:12:0: '1.00'
+    inferred:Партер:13:0: '1.00'
+    inferred:Партер:14:0: '1.00'
+    inferred:Партер:15:0: '1.00'
+    inferred:Партер:2:0: '1.00'
+    inferred:Партер:3:0: '1.00'
+    inferred:Партер:4:0: '1.00'
+    inferred:Партер:4:1: '1.00'
+    inferred:Партер:5:0: '1.00'
+    inferred:Партер:6:0: '1.00'
+    inferred:Партер:7:0: '1.00'
+    inferred:Партер:8:0: '1.00'
+    inferred:Партер:9:0: '1.00'

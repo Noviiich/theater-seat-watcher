@@ -20,7 +20,7 @@ def test_application_status_has_no_network_or_ticket_operations() -> None:
         "expected_hold_ttl_seconds=1200",
         "availability_retry_seconds=180",
         "telegram_token_configured=False",
-        "allowed_user_ids_configured=False",
+        "administrator_configured=False",
         "database_url_configured=False",
         "network_operations=disabled",
         "ticket_operations=disabled",

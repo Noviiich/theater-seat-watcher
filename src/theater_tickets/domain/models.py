@@ -221,11 +221,11 @@ class Subscription:
     theatre_alias: str
     ticket_count: int
     seat_profile_id: str
-    max_sessions_per_batch: int
+    max_sessions_per_batch: int | None
     max_ticket_price: Money | None = None
     max_order_total: Money | None = None
     max_batch_total: Money | None = None
-    max_active_orders: int = 1
+    max_active_orders: int | None = 1
     max_active_total: Money | None = None
     priority: int = 0
     enabled: bool = True
@@ -244,9 +244,9 @@ class Subscription:
             object.__setattr__(self, name, _non_empty_identifier(getattr(self, name), name=name))
         if self.ticket_count <= 0:
             raise DomainValidationError("ticket_count must be positive")
-        if self.max_sessions_per_batch <= 0:
+        if self.max_sessions_per_batch is not None and self.max_sessions_per_batch <= 0:
             raise DomainValidationError("max_sessions_per_batch must be positive")
-        if self.max_active_orders <= 0:
+        if self.max_active_orders is not None and self.max_active_orders <= 0:
             raise DomainValidationError("max_active_orders must be positive")
         if self.date_from and self.date_to and self.date_from > self.date_to:
             raise DomainValidationError("date_from must not be after date_to")

@@ -11,6 +11,7 @@ import yaml
 
 from theater_tickets.application.booking import SeatSelectionConfiguration
 from theater_tickets.domain.errors import DomainValidationError
+from theater_tickets.domain.models import Seat
 from theater_tickets.domain.seating.candidates import ScoringWeights, SelectionPreferences
 from theater_tickets.domain.seating.topology import (
     HallProfile,
@@ -88,6 +89,17 @@ class DirectorySeatProfileSource:
             return load_seat_selection_configuration(path)
         except DomainValidationError as exc:
             raise LookupError("seat profile is missing or invalid") from exc
+
+    def find_matching(self, inventory: tuple[Seat, ...]) -> SeatSelectionConfiguration:
+        """Return the first verified YAML profile whose fingerprint matches this hall."""
+        for path in sorted(self._directory.glob("*.yaml")):
+            try:
+                configuration = load_seat_selection_configuration(path)
+            except DomainValidationError:
+                continue
+            if configuration.profile.matches_inventory(inventory):
+                return configuration
+        raise LookupError("no configured seat profile matches the current hall")
 
 
 def parse_hall_profile(raw: dict[str, Any]) -> HallProfile:

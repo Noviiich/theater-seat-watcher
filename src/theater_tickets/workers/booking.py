@@ -25,7 +25,6 @@ from theater_tickets.application.booking import (
     StartupRecovery,
 )
 from theater_tickets.application.checkout import (
-    CheckoutBuyer,
     CheckoutErrorCode,
     CheckoutRequest,
     CheckoutState,
@@ -66,7 +65,6 @@ class LiveCandidateProcessor:
         checkout: CheckoutSubmitter,
         order_writer: SqlAlchemyOrderOutboxWriter,
         failures: CheckoutFailureRepository,
-        buyer_loader: Callable[[str], CheckoutBuyer],
         now: Callable[[], datetime],
         locks: BuyerCheckoutLocks | None = None,
     ) -> None:
@@ -76,7 +74,6 @@ class LiveCandidateProcessor:
         self._checkout = checkout
         self._order_writer = order_writer
         self._failures = failures
-        self._buyer_loader = buyer_loader
         self._now = now
         self._locks = locks or BuyerCheckoutLocks()
 
@@ -122,31 +119,20 @@ class LiveCandidateProcessor:
                 RenewalProcessState.NEEDS_ATTENTION,
                 stop_reason="booking_mode_mismatch",
             )
-        if any(
-            value is None
-            for value in (
-                context.subscription.max_ticket_price,
-                context.subscription.max_order_total,
-                context.subscription.max_batch_total,
-                context.subscription.max_active_total,
-            )
+        if (
+            context.subscription.max_ticket_price is None
+            or context.subscription.max_order_total is None
         ):
             return RenewalProcessResult(
                 RenewalProcessState.NEEDS_ATTENTION,
                 stop_reason="booking_limits_missing",
             )
-        if context.profile_ref is None:
+        if context.buyer is None:
             return RenewalProcessResult(
                 RenewalProcessState.NEEDS_ATTENTION,
                 stop_reason="buyer_profile_missing",
             )
-        try:
-            buyer = self._buyer_loader(context.profile_ref)
-        except (LookupError, ValueError):
-            return RenewalProcessResult(
-                RenewalProcessState.NEEDS_ATTENTION,
-                stop_reason="buyer_profile_invalid",
-            )
+        buyer = context.buyer
 
         group = evaluation.group.group
         reserved_total = context.subscription.max_order_total or group.total

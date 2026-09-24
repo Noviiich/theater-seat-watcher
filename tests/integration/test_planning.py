@@ -27,7 +27,6 @@ from theater_tickets.adapters.persistence.reconciliation import (
 )
 from theater_tickets.adapters.persistence.unit_of_work import SqlAlchemyUnitOfWork
 from theater_tickets.application.checkout import (
-    CheckoutBuyer,
     CheckoutErrorCode,
     CheckoutStage,
 )
@@ -301,7 +300,12 @@ def test_recovery_state_transitions_keep_allocations_active(tmp_path: Path) -> N
             assert uow.session is not None
             buyer = await uow.session.get(BuyerModel, "buyer")
             assert buyer is not None
-            buyer.profile_ref = "private-profile-ref"
+            buyer.lastname = "Tester"
+            buyer.firstname = "Test"
+            buyer.middlename = "Example"
+            buyer.email = "buyer@example.test"
+            buyer.phone = "+79990000000"
+            buyer.personal_data_consent = True
         subscription = Subscription(
             subscription_id="subscription",
             buyer_id="buyer",
@@ -337,23 +341,7 @@ def test_recovery_state_transitions_keep_allocations_active(tmp_path: Path) -> N
         assert by_intent[intent_ids[0]] is False
         assert all(by_intent[intent_id] for intent_id in intent_ids[1:])
 
-        loaded_refs: list[str] = []
-
-        def load_buyer(reference: str) -> CheckoutBuyer:
-            loaded_refs.append(reference)
-            return CheckoutBuyer(
-                lastname="Tester",
-                firstname="Test",
-                middlename="Example",
-                email="buyer@example.test",
-                phone="+79990000000",
-                personal_data_consent=True,
-            )
-
-        recovered_request = await SqlAlchemyRecoveryRequestLoader(
-            factory, buyer_loader=load_buyer
-        ).load(intent_ids[0])
-        assert loaded_refs == ["private-profile-ref"]
+        recovered_request = await SqlAlchemyRecoveryRequestLoader(factory).load(intent_ids[0])
         assert recovered_request.expected_total == Money(900)
         assert recovered_request.reserved_total == Money(1_000)
         assert recovered_request.seat_ids == ("seat-1-1", "seat-1-2")
@@ -408,7 +396,6 @@ async def _seed(
                     id="buyer",
                     telegram_user_id="1",
                     telegram_chat_id="1",
-                    profile_ref=None,
                     created_at=now,
                 ),
                 SubscriptionModel(

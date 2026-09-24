@@ -15,6 +15,8 @@ from theater_tickets.adapters.persistence.models import (
     SessionModel,
     SubscriptionModel,
 )
+from theater_tickets.adapters.quicktickets.buyer import validate_buyer_profile
+from theater_tickets.application.checkout import CheckoutBuyer
 from theater_tickets.domain.models import BookingMode, Money, RenewalPolicy, Session, Subscription
 
 
@@ -104,13 +106,10 @@ class SubscriptionRepository:
         value: Subscription,
         *,
         telegram_chat_id: str,
-        profile_ref: str | None = None,
     ) -> Subscription:
         buyer = await self.get_or_create_buyer(
             telegram_user_id=value.buyer_id, telegram_chat_id=telegram_chat_id
         )
-        if profile_ref is not None:
-            buyer.profile_ref = profile_ref
         self._session.add(
             SubscriptionModel(
                 id=value.subscription_id,
@@ -124,12 +123,75 @@ class SubscriptionRepository:
         )
         return value
 
+    async def buyer_profile(self, telegram_user_id: str) -> CheckoutBuyer | None:
+        buyer = await self._session.scalar(
+            select(BuyerModel).where(BuyerModel.telegram_user_id == telegram_user_id)
+        )
+        if buyer is None:
+            return None
+        lastname, firstname, middlename, email, phone = (
+            buyer.lastname,
+            buyer.firstname,
+            buyer.middlename,
+            buyer.email,
+            buyer.phone,
+        )
+        if (
+            lastname is None
+            or firstname is None
+            or middlename is None
+            or email is None
+            or phone is None
+        ):
+            return None
+        return validate_buyer_profile(
+            lastname=lastname,
+            firstname=firstname,
+            middlename=middlename,
+            email=email,
+            phone=phone,
+            personal_data_consent=buyer.personal_data_consent,
+        )
+
+    async def save_buyer_profile(
+        self,
+        *,
+        telegram_user_id: str,
+        telegram_chat_id: str,
+        lastname: str,
+        firstname: str,
+        middlename: str,
+        email: str,
+        phone: str,
+    ) -> CheckoutBuyer:
+        profile = validate_buyer_profile(
+            lastname=lastname,
+            firstname=firstname,
+            middlename=middlename,
+            email=email,
+            phone=phone,
+            personal_data_consent=True,
+        )
+        buyer = await self.get_or_create_buyer(
+            telegram_user_id=telegram_user_id, telegram_chat_id=telegram_chat_id
+        )
+        buyer.lastname = profile.lastname
+        buyer.firstname = profile.firstname
+        buyer.middlename = profile.middlename
+        buyer.email = profile.email
+        buyer.phone = profile.phone
+        buyer.personal_data_consent = True
+        return profile
+
     async def list_for_telegram_user(self, telegram_user_id: str) -> tuple[Subscription, ...]:
         rows = (
             await self._session.scalars(
                 select(SubscriptionModel)
                 .join(BuyerModel)
-                .where(BuyerModel.telegram_user_id == telegram_user_id)
+                .where(
+                    BuyerModel.telegram_user_id == telegram_user_id,
+                    SubscriptionModel.deleted_at.is_(None),
+                )
                 .order_by(SubscriptionModel.id)
             )
         ).all()
@@ -141,7 +203,7 @@ class SubscriptionRepository:
             await self._session.execute(
                 select(SubscriptionModel, BuyerModel.telegram_user_id)
                 .join(BuyerModel)
-                .where(SubscriptionModel.enabled.is_(True))
+                .where(SubscriptionModel.enabled.is_(True), SubscriptionModel.deleted_at.is_(None))
                 .order_by(SubscriptionModel.theatre_alias, SubscriptionModel.id)
             )
         ).all()
@@ -154,6 +216,15 @@ class SubscriptionRepository:
         if row is None:
             return False
         row.enabled = enabled
+        row.version += 1
+        return True
+
+    async def delete(self, *, subscription_id: str, telegram_user_id: str) -> bool:
+        row = await self._owned_subscription(subscription_id, telegram_user_id)
+        if row is None:
+            return False
+        row.enabled = False
+        row.deleted_at = datetime.now(UTC)
         row.version += 1
         return True
 
@@ -181,6 +252,7 @@ class SubscriptionRepository:
             .where(
                 SubscriptionModel.id == subscription_id,
                 BuyerModel.telegram_user_id == telegram_user_id,
+                SubscriptionModel.deleted_at.is_(None),
             )
         )
         return result if isinstance(result, SubscriptionModel) else None
@@ -225,11 +297,15 @@ def _subscription_from_model(model: SubscriptionModel, telegram_user_id: str) ->
         theatre_alias=model.theatre_alias,
         ticket_count=model.ticket_count,
         seat_profile_id=model.seat_profile_id,
-        max_sessions_per_batch=integer("max_sessions_per_batch", 1),
+        max_sessions_per_batch=(
+            value if isinstance((value := config.get("max_sessions_per_batch", 1)), int) else None
+        ),
         max_ticket_price=money("max_ticket_price"),
         max_order_total=money("max_order_total"),
         max_batch_total=money("max_batch_total"),
-        max_active_orders=integer("max_active_orders", 1),
+        max_active_orders=(
+            value if isinstance((value := config.get("max_active_orders", 1)), int) else None
+        ),
         max_active_total=money("max_active_total"),
         priority=integer("priority", 0),
         enabled=model.enabled,

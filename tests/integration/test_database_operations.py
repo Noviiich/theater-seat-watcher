@@ -168,7 +168,7 @@ def test_online_backup_restore_preserves_dedup_and_budget_keys(tmp_path: Path) -
     database_url = f"sqlite+aiosqlite:///{database_path}"
     migrate_database(database_url)
     asyncio.run(seed_and_restart(database_url))
-    assert smoke_database(database_url).revision == "0009_runtime_diagnostics"
+    assert smoke_database(database_url).revision == "0014_telegram_per_session_limits"
 
     backup_path = tmp_path / "backups" / "backup.sqlite3"
     assert backup_database(database_url, backup_path) == backup_path.resolve()
@@ -193,4 +193,4 @@ def test_online_backup_restore_preserves_dedup_and_budget_keys(tmp_path: Path) -
         ).fetchone()
     assert allocation == (5_000, 1)
     assert dedup == ("batch:batch:buyer:summary",)
-    assert smoke_database(database_url).revision == "0009_runtime_diagnostics"
+    assert smoke_database(database_url).revision == "0014_telegram_per_session_limits"

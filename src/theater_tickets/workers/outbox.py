@@ -19,14 +19,12 @@ class OutboxWorker:
         *,
         repository: OutboxRepository,
         transport: NotificationTransport,
-        allowed_user_ids: frozenset[str],
         batch_size: int = 20,
     ) -> None:
         if batch_size <= 0:
             raise ValueError("batch_size must be positive")
         self._repository = repository
         self._transport = transport
-        self._allowed_user_ids = allowed_user_ids
         self._batch_size = batch_size
 
     async def recover_startup(self, *, now: datetime) -> int:
@@ -37,10 +35,7 @@ class OutboxWorker:
         self._validate_time(now)
         items = await self._repository.claim_due(now=now, limit=self._batch_size)
         for item in items:
-            if (
-                item.destination_user_id not in self._allowed_user_ids
-                or item.destination_chat_id != item.destination_user_id
-            ):
+            if item.destination_chat_id != item.destination_user_id:
                 await self._repository.reject(
                     outbox_id=item.outbox_id,
                     error_code="invalid_recipient",
