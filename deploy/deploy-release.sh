@@ -93,7 +93,8 @@ if [[ -L "$current" ]]; then
     backup_name="theater-tickets-$(date -u +%Y%m%dT%H%M%SZ)-${release_id}.sqlite3"
     echo "Creating database backup $backup_name"
     docker compose --project-name theater-tickets --file "$previous/deploy/compose.yaml" \
-      exec -T bot theater-tickets backup "/app/backups/$backup_name"
+      exec -T bot python -I - /app/data/theater_tickets.sqlite3 "/app/backups/$backup_name" \
+      < "$release/deploy/backup-database.py"
   else
     echo "Previous bot is not running; database backup needs manual review" >&2
     exit 2

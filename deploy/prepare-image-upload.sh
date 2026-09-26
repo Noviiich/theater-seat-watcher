@@ -4,6 +4,7 @@ set -euo pipefail
 root=/opt/theater-seat-watcher
 current="$root/current"
 prepared="$root/shared/.image-upload-prepared"
+backup_script="$(dirname "$(readlink -f "$0")")/backup-database.py"
 
 if [[ -e "$current" && ! -L "$current" ]]; then
   echo "$current exists and is not a symbolic link" >&2
@@ -48,7 +49,8 @@ if [[ -L "$current" ]] && (( ${#existing_bots[@]} == 1 )); then
   backup_name="theater-tickets-$(date -u +%Y%m%dT%H%M%S%NZ)-before-image-upload.sqlite3"
   echo "Creating database backup $backup_name"
   docker compose --project-name theater-tickets --file "$previous_compose" \
-    exec -T bot theater-tickets backup "/app/backups/$backup_name"
+    exec -T bot python -I - /app/data/theater_tickets.sqlite3 "/app/backups/$backup_name" \
+    < "$backup_script"
   printf '%s\n' "$backup_name" > "$prepared.tmp"
   chmod 0600 "$prepared.tmp"
   mv -f "$prepared.tmp" "$prepared"
