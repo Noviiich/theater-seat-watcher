@@ -12,7 +12,14 @@ from zoneinfo import ZoneInfo
 from theater_tickets.application.checkout import CheckoutBuyer, CheckoutRequest, CheckoutResult
 from theater_tickets.application.ports import TheatreProvider
 from theater_tickets.application.renewals import RenewalTask
-from theater_tickets.domain.models import Money, Seat, Session, Subscription
+from theater_tickets.domain.models import (
+    Money,
+    Seat,
+    SeatAvailability,
+    SeatGroup,
+    Session,
+    Subscription,
+)
 from theater_tickets.domain.seating.candidates import (
     RankedGroup,
     ScoringWeights,
@@ -130,7 +137,7 @@ class ResumableCheckoutRepository(Protocol):
 
 
 class CandidateEvaluator:
-    """Re-read current provider state and choose the best verified adjacent group."""
+    """Re-read provider state and choose a verified group or single unnumbered place."""
 
     def __init__(self, *, provider: TheatreProvider, profiles: SeatProfileSource) -> None:
         self._provider = provider
@@ -156,6 +163,10 @@ class CandidateEvaluator:
         if not capabilities.allows_regular_sale(context.subscription.ticket_count):
             return BookingEvaluation(EvaluationState.WAITING_AVAILABILITY, "sale_unavailable")
         inventory = await self._provider.fetch_inventory(session.key)
+        if inventory and all(seat.is_unnumbered for seat in inventory):
+            if context.subscription.seat_profile_id != "auto":
+                return BookingEvaluation(EvaluationState.NEEDS_ATTENTION, "profile_mismatch")
+            return _evaluate_unnumbered(context.subscription, session, inventory)
         try:
             configuration = (
                 self._profiles.find_matching(inventory)
@@ -187,6 +198,40 @@ class CandidateEvaluator:
             session=session,
             group=selected,
         )
+
+
+def _evaluate_unnumbered(
+    subscription: Subscription, session: Session, inventory: tuple[Seat, ...]
+) -> BookingEvaluation:
+    """Use one free hall place without inventing a row or claiming adjacency."""
+    if subscription.ticket_count != 1:
+        return BookingEvaluation(EvaluationState.WAITING_AVAILABILITY, "unnumbered_multiple")
+    eligible = (
+        seat
+        for seat in inventory
+        if seat.is_unnumbered and seat.availability is SeatAvailability.FREE
+    )
+    for seat in sorted(eligible, key=lambda item: (item.price.minor_units, item.provider_id)):
+        group = SeatGroup(
+            segment_id=f"unnumbered:{seat.provider_id}",
+            seats=(seat,),
+            quality=Decimal(0),
+        )
+        if subscription.allows_seat_group(group):
+            amount = Decimal(seat.price.minor_units) / Decimal(100)
+            return BookingEvaluation(
+                EvaluationState.READY,
+                "selected_unnumbered",
+                session=session,
+                group=RankedGroup(
+                    group,
+                    "unnumbered",
+                    None,
+                    0,
+                    f"{seat.block}; {amount:.2f} ₽",
+                ),
+            )
+    return BookingEvaluation(EvaluationState.WAITING_AVAILABILITY, "no_affordable_unnumbered")
 
 
 def _inferred_configuration(inventory: tuple[Seat, ...]) -> SeatSelectionConfiguration:

@@ -46,6 +46,17 @@ def _required_text(item: dict[str, Any], field: str) -> str:
     return str(value)
 
 
+def _place_labels(item: dict[str, Any]) -> tuple[str, str]:
+    """A hall place may be unnumbered, but a partially labelled place is invalid."""
+    row, number = item.get("series"), item.get("place")
+    if not isinstance(row, (str, int)) or not isinstance(number, (str, int)):
+        raise QuickTicketsContractError("hall place row and number are missing")
+    labels = str(row).strip(), str(number).strip()
+    if bool(labels[0]) != bool(labels[1]):
+        raise QuickTicketsContractError("hall place row and number are incomplete")
+    return labels
+
+
 def _price(value: object) -> Money:
     if isinstance(value, bool) or value is None:
         raise QuickTicketsContractError("hall place price is missing")
@@ -65,6 +76,7 @@ def _availability(base_status: object, overlay_status: object | None) -> SeatAva
         "free": SeatAvailability.FREE,
         "sell": SeatAvailability.SOLD,
         "short_lock": SeatAvailability.HELD,
+        "long_lock": SeatAvailability.HELD,
         "lock": SeatAvailability.HELD,
         "disabled": SeatAvailability.DISABLED,
     }.get(status, SeatAvailability.UNKNOWN)
@@ -123,13 +135,14 @@ def parse_inventory(
         if overlay is not None and not isinstance(overlay, dict):
             raise QuickTicketsContractError("availability place must be an object")
         overlay_status = overlay.get("status") if overlay else None
+        row_label, seat_label = _place_labels(item)
         seats.append(
             Seat(
                 provider_id=provider_id,
                 hall_id=str(hall_id),
                 block=_required_text(item, "block"),
-                row_label=_required_text(item, "series"),
-                seat_label=_required_text(item, "place"),
+                row_label=row_label,
+                seat_label=seat_label,
                 price=_price(item.get("price")),
                 availability=_availability(item.get("status"), overlay_status),
                 x=_integer(item["x"], "x") if "x" in item else None,
@@ -164,10 +177,19 @@ def parse_sale_capabilities(payload: dict[str, Any], *, session_id: str) -> Sale
                 break
     if matching is None:
         raise QuickTicketsContractError("requested session is absent from sale capabilities")
+    names = ("sell", "book", "collectiveSell")
+    session_present = tuple(name in matching for name in names)
+    response_present = tuple(name in response for name in names)
+    if all(session_present) and not any(response_present):
+        capabilities = matching
+    elif not any(session_present) and all(response_present):
+        capabilities = response
+    else:
+        raise QuickTicketsContractError("anysession/anysession sale capabilities are ambiguous")
     sell, book, collective = (
-        _capability(matching.get("sell"), "sell"),
-        _capability(matching.get("book"), "book"),
-        _capability(matching.get("collectiveSell"), "collectiveSell"),
+        _capability(capabilities.get("sell"), "sell"),
+        _capability(capabilities.get("book"), "book"),
+        _capability(capabilities.get("collectiveSell"), "collectiveSell"),
     )
     return SaleCapabilities(
         sell_available=sell["available"],

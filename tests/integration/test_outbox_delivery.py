@@ -118,6 +118,45 @@ def test_order_mismatch_rolls_back_order_and_outbox_together(tmp_path: Path) -> 
     asyncio.run(scenario())
 
 
+def test_confirmed_order_includes_commission_within_reserved_limit(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        factory, engine = await _setup(tmp_path / "commission.sqlite")
+        now = datetime(2026, 9, 20, 9, tzinfo=UTC)
+        intent_id = await _plan(
+            factory,
+            now=now,
+            seats=("a1", "a2"),
+            total=5_000,
+            expected_total=4_000,
+        )
+        writer = SqlAlchemyOrderOutboxWriter(factory)
+        recorded = await writer.record_confirmed_order(
+            intent_id=intent_id,
+            order=_order(now=now, cycle_no=1, seats=("a1", "a2"), total=4_250),
+            recorded_at=now,
+        )
+        async with factory() as database:
+            order = await database.get(OrderModel, recorded.order_id)
+            assert order is not None and order.total_minor == 4_250
+            outbox = await database.get(OutboxMessageModel, recorded.outbox_id)
+            assert outbox is not None and outbox.kind == "payment"
+        for invalid_total in (3_999, 5_001):
+            with pytest.raises(ValueError, match="does not match checkout intent"):
+                await writer.record_confirmed_order(
+                    intent_id=intent_id,
+                    order=_order(
+                        now=now,
+                        cycle_no=1,
+                        seats=("a1", "a2"),
+                        total=invalid_total,
+                    ),
+                    recorded_at=now,
+                )
+        await engine.dispose()
+
+    asyncio.run(scenario())
+
+
 def test_timeout_after_send_retries_after_restart_with_stable_identity(tmp_path: Path) -> None:
     async def scenario() -> None:
         factory, engine = await _setup(tmp_path / "timeout.sqlite")
@@ -334,6 +373,7 @@ async def _plan(
     now: datetime,
     seats: tuple[str, str],
     total: int,
+    expected_total: int | None = None,
 ) -> str:
     async with SqlAlchemyUnitOfWork(factory) as uow:
         assert uow.session is not None
@@ -342,6 +382,7 @@ async def _plan(
             candidate_id="candidate",
             subscription=_subscription(),
             reserved_total=Money(total),
+            expected_total=Money(expected_total) if expected_total is not None else None,
             selected_seat_ids=seats,
             now=now,
         )

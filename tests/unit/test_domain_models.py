@@ -59,6 +59,18 @@ def test_seat_group_rejects_non_free_and_duplicate_seats() -> None:
         SeatGroup("row-1", (free, free), Decimal("0.8"))
 
 
+def test_unnumbered_places_are_valid_singly_but_never_an_adjacent_group() -> None:
+    first = Seat("1", "hall", "Входное место", "", "", Money(35000), SeatAvailability.FREE)
+    second = Seat("2", "hall", "Входное место", "", "", Money(35000), SeatAvailability.FREE)
+
+    assert first.is_unnumbered
+    assert SeatGroup("entrance:1", (first,), Decimal(0)).total == Money(35000)
+    with pytest.raises(DomainValidationError, match="adjacent"):
+        SeatGroup("entrance", (first, second), Decimal(0))
+    with pytest.raises(DomainValidationError, match="both"):
+        Seat("3", "hall", "Входное место", "", "1", Money(35000), SeatAvailability.FREE)
+
+
 def test_subscription_validates_and_matches_local_time_filters() -> None:
     subscription = Subscription(
         subscription_id="sub-1",

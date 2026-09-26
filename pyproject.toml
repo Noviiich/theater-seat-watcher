@@ -38,6 +38,7 @@ packages = ["src/theater_tickets"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = ["-ra"]
+markers = ["live_e2e: creates real QuickTickets holds and sends payment links when explicitly enabled"]
 
 [tool.ruff]
 target-version = "py312"

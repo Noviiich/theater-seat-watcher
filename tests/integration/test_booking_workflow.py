@@ -42,7 +42,9 @@ from theater_tickets.adapters.persistence.repositories import SubscriptionReposi
 from theater_tickets.adapters.persistence.unit_of_work import SqlAlchemyUnitOfWork
 from theater_tickets.adapters.telegram.routers.subscriptions import _new_button_subscription
 from theater_tickets.application.booking import (
+    BookingCandidateContext,
     CandidateEvaluator,
+    EvaluationState,
     SeatSelectionConfiguration,
 )
 from theater_tickets.application.checkout import (
@@ -159,6 +161,114 @@ class FakeTelegram:
 
     async def expire(self, *, chat_id: str, message_id: str) -> None:
         self.edited.append(message_id)
+
+
+def test_unnumbered_places_allow_one_ticket_without_inventing_adjacency() -> None:
+    async def scenario() -> None:
+        now = datetime(2026, 9, 20, 9, tzinfo=UTC)
+        session = _session("entrance", now + timedelta(days=1))
+        provider = FakeProvider()
+        places = tuple(
+            Seat(
+                str(index),
+                "hall",
+                "Входное место",
+                "",
+                "",
+                Money(price),
+                availability,
+            )
+            for index, price, availability in (
+                ("1", 900, SeatAvailability.HELD),
+                ("2", 800, SeatAvailability.FREE),
+                ("3", 700, SeatAvailability.FREE),
+            )
+        )
+        _configure(provider, (session,), places)
+        evaluator = CandidateEvaluator(
+            provider=provider,
+            profiles=StaticProfiles(_selection_configuration(_seats())),
+        )
+        subscription = replace(
+            _subscription(BookingMode.LIVE),
+            ticket_count=1,
+            seat_profile_id="auto",
+            max_ticket_price=Money(750),
+        )
+        context = BookingCandidateContext("candidate", "10", 1, None, subscription, session)
+
+        result = await evaluator.evaluate(context, now=now)
+        assert result.state is EvaluationState.READY
+        assert result.group is not None
+        assert result.group.source == "unnumbered"
+        assert tuple(seat.provider_id for seat in result.group.group.seats) == ("3",)
+        assert result.group.group.total == Money(700)
+
+        multiple = await evaluator.evaluate(
+            replace(context, subscription=replace(subscription, ticket_count=2)), now=now
+        )
+        assert multiple.state is EvaluationState.WAITING_AVAILABILITY
+        assert multiple.reason == "unnumbered_multiple"
+
+        too_expensive = await evaluator.evaluate(
+            replace(context, subscription=replace(subscription, max_ticket_price=Money(600))),
+            now=now,
+        )
+        assert too_expensive.reason == "no_affordable_unnumbered"
+
+    asyncio.run(scenario())
+
+
+def test_new_unnumbered_session_creates_one_hold_and_payment_notification(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        now = datetime(2026, 9, 20, 9, tzinfo=UTC)
+        factory, engine = await _database(tmp_path / "unnumbered.sqlite")
+        subscription = replace(
+            _subscription(BookingMode.LIVE),
+            ticket_count=1,
+            seat_profile_id="auto",
+            max_ticket_price=Money(50000),
+            max_order_total=Money(50000),
+            max_batch_total=Money(50000),
+            max_active_total=Money(50000),
+        )
+        await _persist_subscription(factory, subscription)
+        baseline = _session("base", now + timedelta(days=4))
+        new = _session("entrance", now + timedelta(days=5))
+        provider = FakeProvider()
+        _configure(
+            provider,
+            (baseline, new),
+            (Seat("1456", "hall", "Входное место", "", "", Money(35000), SeatAvailability.FREE),),
+        )
+        clock = FakeClock(now)
+        checkout = FakeCheckout(clock)
+        telegram = FakeTelegram()
+        workflow = _workflow(factory, provider, checkout, telegram, clock)
+
+        await workflow.process_snapshot(
+            subscription=subscription,
+            sessions=(baseline,),
+            fetched_at=now,
+            fingerprint="baseline",
+            complete=True,
+        )
+        outcome = await workflow.process_snapshot(
+            subscription=subscription,
+            sessions=(baseline, new),
+            fetched_at=now + timedelta(minutes=1),
+            fingerprint="new",
+            complete=True,
+        )
+
+        assert outcome.live_processed == 1
+        assert len(checkout.calls) == 1
+        assert checkout.calls[0].seat_ids == ("1456",)
+        assert checkout.calls[0].expected_total == Money(35000)
+        assert len([item for item in telegram.sent if item.payment_url is not None]) == 1
+        await engine.dispose()
+
+    asyncio.run(scenario())
 
 
 def test_baseline_multiple_sessions_renewal_and_stop_are_end_to_end(tmp_path: Path) -> None:

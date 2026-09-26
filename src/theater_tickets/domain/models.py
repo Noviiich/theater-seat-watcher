@@ -141,7 +141,7 @@ class Session:
 
 @dataclass(frozen=True, slots=True)
 class Seat:
-    """One physical seat with a freshly resolved availability state."""
+    """One provider place; blank row and number together mean unnumbered entry."""
 
     provider_id: str
     hall_id: str
@@ -157,12 +157,23 @@ class Seat:
     rotation: int | None = None
 
     def __post_init__(self) -> None:
-        for name in ("provider_id", "hall_id", "block", "row_label", "seat_label"):
+        for name in ("provider_id", "hall_id", "block"):
             object.__setattr__(self, name, _non_empty_identifier(getattr(self, name), name=name))
+        if not isinstance(self.row_label, str) or not isinstance(self.seat_label, str):
+            raise DomainValidationError("place row and number must be strings")
+        row, number = self.row_label.strip(), self.seat_label.strip()
+        if bool(row) != bool(number):
+            raise DomainValidationError("place row and number must both be present or blank")
+        object.__setattr__(self, "row_label", row)
+        object.__setattr__(self, "seat_label", number)
         for name in ("x", "y", "width", "height", "rotation"):
             value = getattr(self, name)
             if value is not None and not isinstance(value, int):
                 raise DomainValidationError(f"{name} must be an integer when set")
+
+    @property
+    def is_unnumbered(self) -> bool:
+        return not self.row_label
 
 
 @dataclass(frozen=True, slots=True)
@@ -183,6 +194,8 @@ class SeatGroup:
             raise DomainValidationError("seat group must not contain duplicate seats")
         if any(seat.availability is not SeatAvailability.FREE for seat in self.seats):
             raise DomainValidationError("seat group must contain only free seats")
+        if len(self.seats) > 1 and any(seat.is_unnumbered for seat in self.seats):
+            raise DomainValidationError("unnumbered places cannot form an adjacent group")
         if not Decimal("0") <= self.quality <= Decimal("1"):
             raise DomainValidationError("quality must be between zero and one")
 

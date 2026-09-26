@@ -41,7 +41,10 @@ async ({path, fields}) => {
   const response = await fetch(path, {
     method: 'POST',
     credentials: 'same-origin',
-    headers: {'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'},
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+      'X-Requested-With': 'XMLHttpRequest',
+    },
     body: body.toString(),
   });
   return {status: response.status, text: await response.text()};
@@ -95,18 +98,7 @@ class PlaywrightQuickTicketsBrowserDriver:
         self._request = request
         try:
             page = await self._start(request)
-            fields = [
-                ("organisationAlias", self._theatre_alias),
-                ("elemType", "session"),
-                ("elemId", request.session_key.session_id),
-                ("collectiveSell", "0"),
-                ("sessionAnyplaces[count]", str(len(request.seat_ids))),
-                ("sessionAnyplaces[amount]", _rubles(request.expected_total)),
-            ]
-            fields.extend(
-                (f"sessionAnyplaces[hallplaces][{index}]", seat_id)
-                for index, seat_id in enumerate(request.seat_ids)
-            )
+            fields = build_init_fields(request, theatre_alias=self._theatre_alias)
             payload = await self._post_json(page, "/ordering/initAnytickets", fields)
             codes, selected_count = parse_init_response(payload)
         except PlaywrightTimeoutError as exc:
@@ -312,6 +304,20 @@ def parse_init_response(payload: dict[str, object]) -> tuple[tuple[str, ...], in
     ):
         raise ValueError("QuickTickets hold response is incomplete")
     return tuple(raw_codes), selected_count
+
+
+def build_init_fields(request: CheckoutRequest, *, theatre_alias: str) -> list[tuple[str, str]]:
+    """Match the observed jQuery form encoding for selected hall places."""
+    fields = [
+        ("organisationAlias", theatre_alias),
+        ("elemType", "session"),
+        ("elemId", request.session_key.session_id),
+        ("collectiveSell", "0"),
+        ("sessionAnyplaces[count]", str(len(request.seat_ids))),
+        ("sessionAnyplaces[amount]", _rubles(request.expected_total)),
+    ]
+    fields.extend(("sessionAnyplaces[hallplaces][]", seat_id) for seat_id in request.seat_ids)
+    return fields
 
 
 def parse_calculation_total(payload: dict[str, object]) -> Money:

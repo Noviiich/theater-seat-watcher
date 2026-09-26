@@ -61,6 +61,25 @@ def test_inventory_overlays_complete_availability_and_preserves_geometry() -> No
     assert (inventory.seats[0].x, inventory.seats[0].width) == (1, 3)
 
 
+def test_inventory_accepts_unnumbered_hall_place_but_rejects_partial_labels() -> None:
+    hall = _hall()
+    response = hall["response"]
+    assert isinstance(response, dict)
+    places = response["places"]
+    assert isinstance(places, list)
+    place = places[0]
+    assert isinstance(place, dict)
+    place.update(block="Входное место", series="", place="")
+
+    inventory = parse_inventory(hall, {"response": {"places": {}}})
+    assert inventory.seats[0].is_unnumbered
+    assert inventory.seats[0].provider_id == "1"
+
+    place["place"] = "1"
+    with pytest.raises(QuickTicketsContractError, match="incomplete"):
+        parse_inventory(hall, {"response": {"places": {}}})
+
+
 def test_inventory_uses_verified_session_hall_id_when_live_response_omits_it() -> None:
     hall = _hall()
     response = hall["response"]
@@ -153,3 +172,41 @@ def test_sale_capabilities_use_only_the_requested_regular_sale_limit() -> None:
     assert capabilities.collective_sell_max == 5
     with pytest.raises(QuickTicketsContractError, match="absent"):
         parse_sale_capabilities(payload, session_id="missing")
+
+
+def test_sale_capabilities_accept_requested_session_response_level_fields() -> None:
+    payload = {
+        "response": {
+            "events": [{"sessions": [{"id": 3152}, {"id": 3153}]}],
+            "sell": {"available": True, "max": 4},
+            "book": {"available": False, "max": 0},
+            "collectiveSell": {"available": True, "min": 2, "max": 30},
+        }
+    }
+    capabilities = parse_sale_capabilities(payload, session_id="3152")
+
+    assert capabilities.allows_regular_sale(1)
+    assert capabilities.sell_max == 4
+    assert capabilities.collective_sell_max == 30
+    with pytest.raises(QuickTicketsContractError, match="absent"):
+        parse_sale_capabilities(payload, session_id="missing")
+
+
+def test_sale_capabilities_reject_mixed_or_partial_locations() -> None:
+    response = {
+        "events": [{"sessions": [{"id": 3152, "sell": {"available": True, "max": 4}}]}],
+        "sell": {"available": True, "max": 4},
+        "book": {"available": False, "max": 0},
+        "collectiveSell": {"available": False},
+    }
+    with pytest.raises(QuickTicketsContractError, match="ambiguous"):
+        parse_sale_capabilities({"response": response}, session_id="3152")
+
+
+def test_long_lock_is_a_held_seat_not_a_free_or_unknown_seat() -> None:
+    inventory = parse_inventory(
+        _hall(),
+        {"response": {"places": {"1": {"status": "long_lock"}}}},
+        expected_hall_id="16",
+    )
+    assert inventory.seats[0].availability is SeatAvailability.HELD

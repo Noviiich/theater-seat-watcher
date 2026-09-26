@@ -70,7 +70,8 @@ class SqlAlchemyOrderOutboxWriter:
                 raise LookupError("buyer not found")
             if (
                 tuple(intent.selected_seat_ids) != order.seat_ids
-                or intent.expected_total_minor != order.total.minor_units
+                or order.total.minor_units < intent.expected_total_minor
+                or order.total.minor_units > intent.reserved_total_minor
                 or intent.currency != order.total.currency
             ):
                 raise ValueError("confirmed order does not match checkout intent")
