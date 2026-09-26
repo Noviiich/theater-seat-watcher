@@ -79,7 +79,8 @@ class SqlAlchemyRecoveryRepository:
                     intent.remote_stage = "reconciled_not_found"
                     intent.write_completed_at = timestamp
                 cycle.state = "submitting"
-                candidate.tracking_state = "submitting"
+                if candidate.tracking_state not in ("stopped", "paused"):
+                    candidate.tracking_state = "submitting"
             elif outcome.disposition is RecoveryDisposition.CONFIRMED:
                 intent.state = "validated"
                 intent.remote_stage = "reconciled_found"

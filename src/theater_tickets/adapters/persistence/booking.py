@@ -6,7 +6,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from theater_tickets.adapters.persistence.models import (
@@ -111,13 +111,29 @@ class SqlAlchemyBookingRepository:
             ),
         )
 
-    async def list_resumable(self, *, limit: int) -> tuple[str, ...]:
+    async def list_resumable(self, *, limit: int, now: datetime) -> tuple[str, ...]:
         if limit <= 0:
             raise ValueError("limit must be positive")
         async with self._session_factory() as database:
             values = await database.scalars(
                 select(CheckoutIntentModel.id)
-                .where(CheckoutIntentModel.state.in_(("pending", "retry_allowed")))
+                .join(
+                    RenewalCycleModel, RenewalCycleModel.id == CheckoutIntentModel.renewal_cycle_id
+                )
+                .join(CandidateModel, CandidateModel.id == RenewalCycleModel.candidate_id)
+                .join(SubscriptionModel, SubscriptionModel.id == CandidateModel.subscription_id)
+                .join(SessionModel, SessionModel.id == CandidateModel.session_id)
+                .where(
+                    CheckoutIntentModel.state.in_(("pending", "retry_allowed")),
+                    CandidateModel.tracking_state == "submitting",
+                    CandidateModel.booking_mode == "live",
+                    CandidateModel.current_cycle_no == RenewalCycleModel.cycle_no,
+                    CandidateModel.subscription_version == SubscriptionModel.version,
+                    SubscriptionModel.enabled.is_(True),
+                    SubscriptionModel.deleted_at.is_(None),
+                    SessionModel.starts_at > now,
+                    or_(CandidateModel.watch_until.is_(None), CandidateModel.watch_until > now),
+                )
                 .order_by(CheckoutIntentModel.created_at, CheckoutIntentModel.id)
                 .limit(limit)
             )

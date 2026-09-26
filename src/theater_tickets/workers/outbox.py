@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import replace
 from datetime import datetime, timedelta
 from time import monotonic
@@ -23,6 +24,7 @@ class OutboxWorker:
         transport: NotificationTransport,
         batch_size: int = 20,
         event_log: RuntimeEventLog | None = None,
+        now: Callable[[], datetime] | None = None,
     ) -> None:
         if batch_size <= 0:
             raise ValueError("batch_size must be positive")
@@ -30,6 +32,8 @@ class OutboxWorker:
         self._transport = transport
         self._batch_size = batch_size
         self._event_log = event_log
+        self._now = now
+        self._interrupted = False
 
     async def recover_startup(self, *, now: datetime) -> int:
         self._validate_time(now)
@@ -37,8 +41,25 @@ class OutboxWorker:
 
     async def run_once(self, *, now: datetime) -> int:
         self._validate_time(now)
+        # This worker has one consumer. A failed DB write must not leave its
+        # claimed messages in 'sending' until the next process restart.
+        if self._interrupted:
+            await self._repository.recover_claims(now=now)
+        self._interrupted = True
+        count = await self._deliver(now=now)
+        self._interrupted = False
+        return count
+
+    async def _deliver(self, *, now: datetime) -> int:
         items = await self._repository.claim_due(now=now, limit=self._batch_size)
         for item in items:
+            now = self._now() if self._now is not None else now
+            self._validate_time(now)
+            if item.expires_at is not None and item.expires_at <= now:
+                await self._repository.reject(
+                    outbox_id=item.outbox_id, error_code="payment_expired", now=now
+                )
+                continue
             if item.destination_chat_id != item.destination_user_id:
                 await self._repository.reject(
                     outbox_id=item.outbox_id,
@@ -46,14 +67,6 @@ class OutboxWorker:
                     now=now,
                 )
                 continue
-            if item.previous_message_id is not None:
-                try:
-                    await self._transport.expire(
-                        chat_id=item.destination_chat_id,
-                        message_id=item.previous_message_id,
-                    )
-                except Exception:
-                    pass
             try:
                 delivered = item
                 if item.expires_at is not None:
@@ -73,6 +86,7 @@ class OutboxWorker:
                         duration_ms=round((monotonic() - send_started) * 1000),
                     )
             except NotificationRateLimited as exc:
+                now = self._now() if self._now is not None else now
                 await self._repository.schedule_retry(
                     outbox_id=item.outbox_id,
                     now=now,
@@ -80,7 +94,8 @@ class OutboxWorker:
                     error_code="rate_limited",
                 )
             except Exception:
-                delay = min(30 * (2 ** max(item.attempts - 1, 0)), 1800)
+                now = self._now() if self._now is not None else now
+                delay = min(30 * (2 ** min(max(item.attempts - 1, 0), 6)), 1800)
                 await self._repository.schedule_retry(
                     outbox_id=item.outbox_id,
                     now=now,
@@ -91,8 +106,16 @@ class OutboxWorker:
                 await self._repository.mark_sent(
                     outbox_id=item.outbox_id,
                     message_id=message_id,
-                    sent_at=now,
+                    sent_at=self._now() if self._now is not None else now,
                 )
+                if item.previous_message_id is not None:
+                    try:
+                        await self._transport.expire(
+                            chat_id=item.destination_chat_id,
+                            message_id=item.previous_message_id,
+                        )
+                    except Exception:
+                        pass
         return len(items)
 
     @staticmethod

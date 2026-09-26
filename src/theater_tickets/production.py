@@ -55,7 +55,12 @@ from theater_tickets.application.reconciliation import CheckoutRecoveryService
 from theater_tickets.bootstrap import RuntimeCallbacks, create_runtime_supervisor
 from theater_tickets.domain.models import BookingMode
 from theater_tickets.settings import Settings
-from theater_tickets.workers.booking import BookingWorkflow, DryRunWorker, LiveCandidateProcessor
+from theater_tickets.workers.booking import (
+    BookingWorkflow,
+    CheckoutResumeWorker,
+    DryRunWorker,
+    LiveCandidateProcessor,
+)
 from theater_tickets.workers.outbox import OutboxWorker
 from theater_tickets.workers.polling import CataloguePollingWorker
 from theater_tickets.workers.renewals import RenewalWorker
@@ -133,6 +138,7 @@ async def run_production(settings: Settings) -> None:
                 failures=booking_repository,
                 now=now,
                 event_log=event_log,
+                outbox_wake_event=outbox_wake_event,
             ),
         )
         dry_run_worker = DryRunWorker(
@@ -144,6 +150,7 @@ async def run_production(settings: Settings) -> None:
             repository=SqlAlchemyOutboxRepository(session_factory),
             transport=AiogramNotificationTransport(bot),
             event_log=event_log,
+            now=now,
         )
         recovery_loader = SqlAlchemyRecoveryRequestLoader(session_factory)
         recovery = CheckoutRecoveryService(
@@ -163,6 +170,19 @@ async def run_production(settings: Settings) -> None:
             outbox_worker=outbox_worker,
             summaries=SqlAlchemyBatchSummaryScheduler(session_factory),
             checkout_recovery=recovery,
+            resume_worker=(
+                CheckoutResumeWorker(
+                    repository=booking_repository,
+                    request_loader=recovery_loader,
+                    checkout=checkout,
+                    order_writer=SqlAlchemyOrderOutboxWriter(session_factory),
+                    failures=booking_repository,
+                    renewals=renewal_repository,
+                    outbox_wake_event=outbox_wake_event,
+                )
+                if runtime_booking_mode is BookingMode.LIVE
+                else None
+            ),
         )
         catalogue = CataloguePollingWorker(
             session_factory=session_factory,

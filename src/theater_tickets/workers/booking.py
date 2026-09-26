@@ -70,6 +70,7 @@ class LiveCandidateProcessor:
         now: Callable[[], datetime],
         locks: BuyerCheckoutLocks | None = None,
         event_log: RuntimeEventLog | None = None,
+        outbox_wake_event: asyncio.Event | None = None,
     ) -> None:
         self._session_factory = session_factory
         self._contexts = contexts
@@ -80,6 +81,7 @@ class LiveCandidateProcessor:
         self._now = now
         self._locks = locks or BuyerCheckoutLocks()
         self._event_log = event_log
+        self._outbox_wake_event = outbox_wake_event
 
     async def process(self, task: RenewalTask) -> RenewalProcessResult:
         context = await self._contexts.load(task.candidate_id)
@@ -205,8 +207,10 @@ class LiveCandidateProcessor:
             await self._order_writer.record_confirmed_order(
                 intent_id=request.intent_id,
                 order=result.order,
-                recorded_at=now,
+                recorded_at=self._now(),
             )
+            if self._outbox_wake_event is not None:
+                self._outbox_wake_event.set()
             if self._event_log is not None:
                 self._event_log.emit(
                     "order_recorded",
@@ -307,6 +311,7 @@ class CheckoutResumeWorker:
         failures: CheckoutFailureRepository,
         renewals: RenewalRepository,
         batch_size: int = 20,
+        outbox_wake_event: asyncio.Event | None = None,
     ) -> None:
         self._repository = repository
         self._request_loader = request_loader
@@ -315,9 +320,10 @@ class CheckoutResumeWorker:
         self._failures = failures
         self._renewals = renewals
         self._batch_size = batch_size
+        self._outbox_wake_event = outbox_wake_event
 
     async def run_once(self, *, now: datetime) -> int:
-        intent_ids = await self._repository.list_resumable(limit=self._batch_size)
+        intent_ids = await self._repository.list_resumable(limit=self._batch_size, now=now)
         for intent_id in intent_ids:
             request = await self._request_loader.load(intent_id)
             task, cycle_no = await self._repository.renewal_task(intent_id)
@@ -329,6 +335,8 @@ class CheckoutResumeWorker:
                     order=result.order,
                     recorded_at=now,
                 )
+                if self._outbox_wake_event is not None:
+                    self._outbox_wake_event.set()
                 await self._renewals.schedule_after_hold(
                     task=task,
                     cycle_no=cycle_no,
@@ -426,6 +434,8 @@ class BookingWorkflow:
 
     async def run_booking_due(self, *, now: datetime) -> WorkflowOutcome:
         """Process booking state without waiting for Telegram delivery."""
+        if self._resume_worker is not None:
+            await self._resume_worker.run_once(now=now)
         live = await self._renewal_worker.run_once(now=now)
         dry = await self._dry_run_worker.run_once(now=now)
         await self._summaries.enqueue_pending(now=now)
@@ -438,8 +448,6 @@ class BookingWorkflow:
     async def recover_startup(self, *, now: datetime) -> None:
         if self._checkout_recovery is not None:
             await self._checkout_recovery.recover_startup()
-        if self._resume_worker is not None:
-            await self._resume_worker.run_once(now=now)
         await self._renewal_worker.recover_startup()
         await self._dry_run_worker.recover_startup()
         await self._outbox_worker.recover_startup(now=now)

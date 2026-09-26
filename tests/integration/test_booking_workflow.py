@@ -747,8 +747,13 @@ def test_restart_before_checkout_resumes_same_intent_once(tmp_path: Path) -> Non
             failures=repository,
             renewals=SqlAlchemyRenewalRepository(factory),
         )
-        assert await resume.run_once(now=now) == 1
-        assert await resume.run_once(now=now) == 0
+        workflow = _workflow(
+            factory, FakeProvider(), checkout, FakeTelegram(), clock, resume_worker=resume
+        )
+        await workflow.recover_startup(now=now)
+        assert checkout.calls == []
+        await workflow.run_due(now=now)
+        await workflow.run_due(now=now)
         assert len(checkout.calls) == 1
         assert checkout.calls[0].intent_id == planned.checkout_intent_id
         async with factory() as database:
@@ -766,6 +771,8 @@ def _workflow(
     checkout: FakeCheckout,
     telegram: FakeTelegram,
     clock: FakeClock,
+    outbox_wake_event: asyncio.Event | None = None,
+    resume_worker: CheckoutResumeWorker | None = None,
 ) -> BookingWorkflow:
     repository = SqlAlchemyBookingRepository(factory)
     evaluator = CandidateEvaluator(
@@ -780,6 +787,7 @@ def _workflow(
         order_writer=SqlAlchemyOrderOutboxWriter(factory),
         failures=repository,
         now=lambda: clock.now,
+        outbox_wake_event=outbox_wake_event,
     )
     renewal = RenewalWorker(
         repository=SqlAlchemyRenewalRepository(factory),
@@ -796,6 +804,7 @@ def _workflow(
         dry_run_worker=dry,
         outbox_worker=outbox,
         summaries=SqlAlchemyBatchSummaryScheduler(factory),
+        resume_worker=resume_worker,
     )
 
 
@@ -965,3 +974,114 @@ async def _database(database: Path) -> tuple[async_sessionmaker[AsyncSession], A
     command.upgrade(config, "head")
     engine, factory = create_session_factory(f"sqlite+aiosqlite:///{database}")
     return factory, engine
+
+
+def test_first_payment_is_delivered_while_next_checkout_is_blocked(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        now = datetime(2026, 9, 20, 9, tzinfo=UTC)
+        factory, engine = await _database(tmp_path / "immediate.sqlite")
+        subscription = _subscription(BookingMode.LIVE, max_sessions=3, max_active=3)
+        await _persist_subscription(factory, subscription)
+        provider = FakeProvider()
+        sessions = tuple(_session(str(i), now + timedelta(days=i + 1)) for i in range(3))
+        _configure(provider, sessions, _seats())
+        clock = FakeClock(now)
+        wake = asyncio.Event()
+        delivered = asyncio.Event()
+        second_started = asyncio.Event()
+        telegram = FakeTelegram()
+
+        class SlowSecondCheckout(FakeCheckout):
+            async def submit(self, request: CheckoutRequest) -> CheckoutResult:
+                if self.calls:
+                    second_started.set()
+                    await asyncio.wait_for(delivered.wait(), timeout=2)
+                    assert len([item for item in telegram.sent if item.payment_url]) == 1
+                return await super().submit(request)
+
+        checkout = SlowSecondCheckout(clock)
+        workflow = _workflow(factory, provider, checkout, telegram, clock, wake)
+        await workflow.process_snapshot(
+            subscription=subscription,
+            sessions=sessions[:1],
+            fetched_at=now,
+            fingerprint="baseline",
+            complete=True,
+        )
+
+        async def send_first() -> None:
+            await asyncio.wait_for(wake.wait(), timeout=2)
+            await asyncio.wait_for(second_started.wait(), timeout=2)
+            assert await workflow.run_outbox_due(now=now) == 1
+            delivered.set()
+
+        sender = asyncio.create_task(send_first())
+        try:
+            result = await workflow.process_snapshot(
+                subscription=subscription,
+                sessions=sessions,
+                fetched_at=now,
+                fingerprint="new",
+                complete=True,
+            )
+            await sender
+            assert result.live_processed == 2
+            assert len([item for item in telegram.sent if item.payment_url]) == 2
+            assert all(len(request.seat_ids) == 2 for request in checkout.calls)
+        finally:
+            sender.cancel()
+            await asyncio.gather(sender, return_exceptions=True)
+            await engine.dispose()
+
+    asyncio.run(scenario())
+
+
+def test_pending_checkout_respects_stop_pause_deadline_and_changed_settings(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        factory, engine = await _database(tmp_path / "resume-guards.sqlite")
+        now = datetime(2026, 9, 20, 9, tzinfo=UTC)
+        subscription = _subscription(BookingMode.LIVE)
+        await _persist_subscription(factory, subscription)
+        await _seed_live_candidate(factory, now)
+        async with SqlAlchemyUnitOfWork(factory) as uow:
+            assert uow.session is not None
+            planned = await BookingPlanner().plan(
+                uow.session,
+                candidate_id="candidate",
+                subscription=subscription,
+                reserved_total=Money(5_000),
+                expected_total=Money(3_000),
+                selected_seat_ids=("2", "3"),
+                now=now,
+                subscription_version=1,
+            )
+        repository = SqlAlchemyBookingRepository(factory)
+        assert await repository.list_resumable(limit=20, now=now) == (planned.checkout_intent_id,)
+        assert await repository.list_resumable(limit=20, now=now + timedelta(days=2)) == ()
+        async with factory() as db, db.begin():
+            rule = await db.get(SubscriptionModel, "subscription")
+            assert rule is not None
+            rule.enabled = False
+        assert await repository.list_resumable(limit=20, now=now) == ()
+        async with factory() as db, db.begin():
+            rule = await db.get(SubscriptionModel, "subscription")
+            assert rule is not None
+            rule.enabled = True
+            rule.version = 2
+        assert await repository.list_resumable(limit=20, now=now) == ()
+        async with factory() as db, db.begin():
+            rule = await db.get(SubscriptionModel, "subscription")
+            candidate = await db.get(CandidateModel, "candidate")
+            assert rule is not None and candidate is not None
+            rule.version = 1
+            candidate.tracking_state = "stopped"
+        from theater_tickets.adapters.persistence.reconciliation import SqlAlchemyRecoveryRepository
+        from theater_tickets.application.reconciliation import RecoveryDisposition, RecoveryOutcome
+
+        await SqlAlchemyRecoveryRepository(factory, now=lambda: now).apply(
+            RecoveryOutcome(planned.checkout_intent_id, RecoveryDisposition.RETRY_ALLOWED)
+        )
+        assert await repository.list_resumable(limit=20, now=now) == ()
+        await engine.dispose()
+
+    asyncio.run(scenario())

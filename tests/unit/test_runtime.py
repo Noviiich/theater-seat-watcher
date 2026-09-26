@@ -116,7 +116,7 @@ def test_worker_uses_exponential_backoff_retry_after_and_resets_after_success() 
             event_log=log,
             now=lambda: now,
         )
-        assert await limited_worker.execute_once() == 30
+        assert await limited_worker.execute_once() == 45
 
     asyncio.run(scenario())
 
@@ -262,3 +262,130 @@ def test_status_shows_stale_catalogue_next_cycle_stop_reason_and_ttl() -> None:
     assert "ссылка действует ещё 10 мин 0 с" in text
     assert "причина: user_stop" in text
     assert "catalogue=backoff (rate_limited)" in text
+
+
+def test_backoff_survives_prolonged_outage_and_ignores_wakeup() -> None:
+    async def scenario() -> None:
+        stop = asyncio.Event()
+        wake = asyncio.Event()
+        calls = 0
+
+        async def failing() -> None:
+            nonlocal calls
+            calls += 1
+            wake.set()
+            raise RuntimeError("offline")
+
+        worker = ResilientPollingWorker(
+            name="booking",
+            callback=failing,
+            schedule=WorkerSchedule(1, initial_backoff_seconds=0.05, max_backoff_seconds=0.05),
+            state_store=MemoryStateStore(),
+            event_log=MemoryLog(),
+            wake_event=wake,
+        )
+        for _ in range(1100):
+            assert await worker.execute_once() == 0.05
+        calls = 0
+        running = asyncio.create_task(worker.run(stop))
+        await asyncio.sleep(0.02)
+        stop.set()
+        await asyncio.wait_for(running, timeout=1)
+        assert calls == 1
+
+    asyncio.run(scenario())
+
+
+def test_supervisor_renews_lease_during_recovery_and_shutdown() -> None:
+    async def scenario() -> None:
+        renewed = asyncio.Event()
+        checkout_started = asyncio.Event()
+        finish_checkout = asyncio.Event()
+
+        class Store(MemoryStateStore):
+            async def heartbeat(self, **kwargs: object) -> bool:
+                renewed.set()
+                return True
+
+        async def recover() -> None:
+            await asyncio.wait_for(renewed.wait(), timeout=1)
+
+        async def checkout() -> None:
+            checkout_started.set()
+            await finish_checkout.wait()
+
+        store = Store()
+        supervisor = RuntimeSupervisor(
+            workers=(
+                ResilientPollingWorker(
+                    name="booking",
+                    callback=checkout,
+                    schedule=WorkerSchedule(1),
+                    state_store=store,
+                    event_log=MemoryLog(),
+                ),
+            ),
+            recoveries=(recover,),
+            state_store=store,
+            event_log=MemoryLog(),
+            lease_seconds=0.06,
+            shutdown_grace_seconds=1,
+        )
+        running = asyncio.create_task(supervisor.run())
+        try:
+            await asyncio.wait_for(checkout_started.wait(), timeout=1)
+            renewed.clear()
+            supervisor.request_shutdown()
+            await asyncio.wait_for(renewed.wait(), timeout=1)
+            assert store.owner is not None
+            finish_checkout.set()
+            await asyncio.wait_for(running, timeout=1)
+            assert store.owner is None
+        finally:
+            running.cancel()
+            await asyncio.gather(running, return_exceptions=True)
+
+    asyncio.run(scenario())
+
+
+def test_lease_loss_cancels_recovery_before_workers_start() -> None:
+    async def scenario() -> None:
+        cancelled = asyncio.Event()
+        calls = 0
+
+        class Store(MemoryStateStore):
+            async def heartbeat(self, **kwargs: object) -> bool:
+                return False
+
+        async def recover() -> None:
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cancelled.set()
+
+        async def callback() -> None:
+            nonlocal calls
+            calls += 1
+
+        store = Store()
+        supervisor = RuntimeSupervisor(
+            workers=(
+                ResilientPollingWorker(
+                    name="booking",
+                    callback=callback,
+                    schedule=WorkerSchedule(1),
+                    state_store=store,
+                    event_log=MemoryLog(),
+                ),
+            ),
+            recoveries=(recover,),
+            state_store=store,
+            event_log=MemoryLog(),
+            lease_seconds=0.03,
+        )
+        await asyncio.wait_for(supervisor.run(), timeout=1)
+        assert cancelled.is_set()
+        assert calls == 0
+        assert store.owner is None
+
+    asyncio.run(scenario())

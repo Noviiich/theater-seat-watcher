@@ -506,3 +506,54 @@ async def _setup(
             )
         )
     return factory, engine
+
+
+def test_database_ack_failure_recovers_delivery_without_restart(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        factory, engine = await _setup(tmp_path / "ack.sqlite")
+        now = datetime(2026, 9, 20, 9, tzinfo=UTC)
+        await _create_order(factory, now=now, cycle_no=1, seats=("a1", "a2"), total=4_000)
+
+        class FailingAck(SqlAlchemyOutboxRepository):
+            failed = False
+
+            async def mark_sent(self, **kwargs: object) -> None:
+                if not self.failed:
+                    self.failed = True
+                    raise RuntimeError("database temporarily unavailable")
+                await super().mark_sent(**kwargs)
+
+        telegram = FakeTelegram([])
+        worker = OutboxWorker(repository=FailingAck(factory), transport=telegram)
+        with pytest.raises(RuntimeError):
+            await worker.run_once(now=now)
+        assert await worker.run_once(now=now + timedelta(seconds=1)) == 1
+        assert telegram.sent[0].outbox_id == telegram.sent[1].outbox_id
+        async with factory() as database:
+            message = await database.scalar(select(OutboxMessageModel))
+            assert message is not None and message.state == "sent"
+            assert await database.scalar(select(func.count()).select_from(OrderModel)) == 1
+        await engine.dispose()
+
+    asyncio.run(scenario())
+
+
+def test_payment_expiring_while_batch_is_sent_is_not_delivered(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        factory, engine = await _setup(tmp_path / "expired-in-batch.sqlite")
+        now = datetime(2026, 9, 20, 9, tzinfo=UTC)
+        await _create_order(factory, now=now, cycle_no=1, seats=("a1", "a2"), total=4_000)
+        telegram = FakeTelegram([])
+        worker = OutboxWorker(
+            repository=SqlAlchemyOutboxRepository(factory),
+            transport=telegram,
+            now=lambda: now + timedelta(seconds=1201),
+        )
+        assert await worker.run_once(now=now) == 1
+        assert telegram.sent == []
+        async with factory() as database:
+            message = await database.scalar(select(OutboxMessageModel))
+            assert message is not None and message.last_error_code == "payment_expired"
+        await engine.dispose()
+
+    asyncio.run(scenario())

@@ -49,6 +49,7 @@ class ResilientPollingWorker:
         self._wake_event = wake_event
         self._monotonic = monotonic or time.monotonic
         self._failures = 0
+        self._backoff = schedule.initial_backoff_seconds
         self._last_success: datetime | None = None
 
     async def execute_once(self) -> float:
@@ -113,6 +114,7 @@ class ResilientPollingWorker:
 
         finished = self._now()
         self._failures = 0
+        self._backoff = self._schedule.initial_backoff_seconds
         self._last_success = finished
         interval = max(
             0.0,
@@ -150,7 +152,7 @@ class ResilientPollingWorker:
             if self._wake_event is not None:
                 self._wake_event.clear()
             delay = await self.execute_once()
-            if self._wake_event is None:
+            if self._wake_event is None or self._failures:
                 try:
                     await asyncio.wait_for(stop.wait(), timeout=delay)
                 except TimeoutError:
@@ -172,12 +174,10 @@ class ResilientPollingWorker:
     def _failure_delay(self, exc: Exception) -> float:
         retry_after = getattr(exc, "retry_after_seconds", None)
         if isinstance(retry_after, int | float) and not isinstance(retry_after, bool):
-            return min(
-                max(float(retry_after), self._schedule.initial_backoff_seconds),
-                self._schedule.max_backoff_seconds,
-            )
-        exponential = self._schedule.initial_backoff_seconds * float(2 ** (self._failures - 1))
-        return float(min(exponential, self._schedule.max_backoff_seconds))
+            return max(float(retry_after), self._schedule.initial_backoff_seconds)
+        delay = self._backoff
+        self._backoff = min(self._backoff * 2, self._schedule.max_backoff_seconds)
+        return delay
 
     async def _record(self, run: WorkerRun) -> None:
         try:
@@ -221,6 +221,7 @@ class RuntimeSupervisor:
         self._now = now or (lambda: datetime.now(UTC))
         self._owner_id = owner_id or str(uuid4())
         self._stop = asyncio.Event()
+        self._lease_lost = False
 
     def request_shutdown(self) -> None:
         self._stop.set()
@@ -236,38 +237,64 @@ class RuntimeSupervisor:
         self._event_log.emit("runtime_started", owner_id=self._owner_id)
         tasks: list[asyncio.Task[None]] = []
         heartbeat: asyncio.Task[None] | None = None
+        recovery_task: asyncio.Task[None] | None = None
+        stop_wait = asyncio.create_task(self._stop.wait())
         try:
-            for recovery in self._recoveries:
-                await recovery()
+            heartbeat = asyncio.create_task(self._heartbeat(), name="runtime:heartbeat")
+            recovery_task = asyncio.create_task(self._recover(), name="runtime:recovery")
+            await asyncio.wait((recovery_task, stop_wait), return_when=asyncio.FIRST_COMPLETED)
+            if self._stop.is_set():
+                return
+            await recovery_task
             tasks = [
                 asyncio.create_task(worker.run(self._stop), name=f"worker:{worker.name}")
                 for worker in self._workers
             ]
-            heartbeat = asyncio.create_task(self._heartbeat(), name="runtime:heartbeat")
-            await self._stop.wait()
+            done, _ = await asyncio.wait((*tasks, stop_wait), return_when=asyncio.FIRST_COMPLETED)
+            if not self._stop.is_set():
+                for task in tasks:
+                    if task in done:
+                        raise RuntimeError(
+                            "runtime worker stopped unexpectedly"
+                        ) from task.exception()
         finally:
             self._stop.set()
-            if heartbeat is not None:
-                heartbeat.cancel()
-                await asyncio.gather(heartbeat, return_exceptions=True)
+            if recovery_task is not None:
+                recovery_task.cancel()
+                await asyncio.gather(recovery_task, return_exceptions=True)
             if tasks:
-                _, pending = await asyncio.wait(tasks, timeout=self._shutdown_grace_seconds)
+                deadline = asyncio.get_running_loop().time() + self._shutdown_grace_seconds
+                pending = set(tasks)
+                while pending and not self._lease_lost:
+                    remaining = deadline - asyncio.get_running_loop().time()
+                    if remaining <= 0:
+                        break
+                    watched = (*pending, heartbeat) if heartbeat is not None else tuple(pending)
+                    done, _ = await asyncio.wait(
+                        watched, timeout=remaining, return_when=asyncio.FIRST_COMPLETED
+                    )
+                    pending.difference_update(done)
                 for task in pending:
                     task.cancel()
                 if pending:
                     await asyncio.gather(*pending, return_exceptions=True)
                 await asyncio.gather(*tasks, return_exceptions=True)
+            if heartbeat is not None:
+                heartbeat.cancel()
+                await asyncio.gather(heartbeat, return_exceptions=True)
+            stop_wait.cancel()
+            await asyncio.gather(stop_wait, return_exceptions=True)
             await self._state_store.release_lock(owner_id=self._owner_id)
             self._event_log.emit("runtime_stopped", owner_id=self._owner_id)
 
+    async def _recover(self) -> None:
+        for recovery in self._recoveries:
+            await recovery()
+
     async def _heartbeat(self) -> None:
         interval = self._lease_seconds / 3
-        while not self._stop.is_set():
-            try:
-                await asyncio.wait_for(self._stop.wait(), timeout=interval)
-                return
-            except TimeoutError:
-                pass
+        while True:
+            await asyncio.sleep(interval)
             try:
                 owned = await self._state_store.heartbeat(
                     owner_id=self._owner_id,
@@ -276,10 +303,12 @@ class RuntimeSupervisor:
                 )
             except Exception:
                 self._event_log.emit("runtime_lock_lost", error_code="heartbeat_failed")
+                self._lease_lost = True
                 self._stop.set()
                 return
             if not owned:
                 self._event_log.emit("runtime_lock_lost", error_code="lease_not_owned")
+                self._lease_lost = True
                 self._stop.set()
                 return
 

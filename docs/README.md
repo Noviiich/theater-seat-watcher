@@ -24,6 +24,7 @@ Dry-run развёртывание и production entrypoint завершены �
 | [project-structure.md](project-structure.md) | Целевая структура Python-пакета и направление зависимостей |
 | [operations.md](operations.md) | Dry-run deployment, секреты, обновление, backup и restore |
 | [deployment.md](deployment.md) | Bootstrap сервера и автодеплой из GitHub |
+| [reliability-review.md](reliability-review.md) | Проверка скорости, доставки и восстановления от 26.09.2026 |
 | [live-acceptance.md](live-acceptance.md) | Датированный preflight и критерии допуска к live-проверке |
 | [roadmap.md](roadmap.md) | Последовательность шагов под отдельные коммиты |
 | [../AGENTS.md](../AGENTS.md) | Инструкции для разработки |
