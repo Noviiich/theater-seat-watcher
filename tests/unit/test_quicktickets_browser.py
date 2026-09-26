@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import asyncio
 from decimal import Decimal
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
 from theater_tickets.adapters.quicktickets.browser import (
+    QuickTicketsBrowserRuntime,
     build_init_fields,
     parse_calculation_quote,
     parse_calculation_total,
@@ -13,6 +17,38 @@ from theater_tickets.adapters.quicktickets.browser import (
 )
 from theater_tickets.application.checkout import CheckoutBuyer, CheckoutRequest
 from theater_tickets.domain.models import Money, SessionKey
+
+
+def test_browser_runtime_reuses_process_but_creates_isolated_contexts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    first, second = object(), object()
+    browser = SimpleNamespace(
+        new_context=AsyncMock(side_effect=[first, second]),
+        is_connected=Mock(return_value=True),
+        close=AsyncMock(),
+    )
+    playwright = SimpleNamespace(
+        chromium=SimpleNamespace(launch=AsyncMock(return_value=browser)), stop=AsyncMock()
+    )
+    start = AsyncMock(return_value=playwright)
+    monkeypatch.setattr(
+        "theater_tickets.adapters.quicktickets.browser.async_playwright",
+        lambda: SimpleNamespace(start=start),
+    )
+
+    async def scenario() -> None:
+        runtime = QuickTicketsBrowserRuntime()
+        assert await runtime.new_context() is first
+        assert await runtime.new_context() is second
+        start.assert_awaited_once()
+        playwright.chromium.launch.assert_awaited_once()
+        assert browser.new_context.await_count == 2
+        await runtime.aclose()
+        browser.close.assert_awaited_once()
+        playwright.stop.assert_awaited_once()
+
+    asyncio.run(scenario())
 
 
 def test_init_form_repeats_jquery_array_name_without_indexes() -> None:

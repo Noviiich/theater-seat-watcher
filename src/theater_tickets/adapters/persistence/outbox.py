@@ -71,7 +71,10 @@ class SqlAlchemyOrderOutboxWriter:
             if (
                 tuple(intent.selected_seat_ids) != order.seat_ids
                 or order.total.minor_units < intent.expected_total_minor
-                or order.total.minor_units > intent.reserved_total_minor
+                or (
+                    not intent.price_unlimited
+                    and order.total.minor_units > intent.reserved_total_minor
+                )
                 or intent.currency != order.total.currency
             ):
                 raise ValueError("confirmed order does not match checkout intent")
@@ -136,7 +139,8 @@ class SqlAlchemyOrderOutboxWriter:
             intent.state = "confirmed"
             intent.remote_stage = "validated"
             cycle.state = "awaiting_payment"
-            candidate.tracking_state = "awaiting_payment"
+            if candidate.tracking_state != "stopped":
+                candidate.tracking_state = "awaiting_payment"
             return RecordedOrder(order_id, outbox_id)
 
     async def enqueue_batch_summary(

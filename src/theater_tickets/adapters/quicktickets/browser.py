@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from collections.abc import Callable
@@ -68,6 +69,33 @@ _SUBMIT_FORM_SCRIPT = """
 """
 
 
+class QuickTicketsBrowserRuntime:
+    """Reuse Chromium while isolating each checkout in a new cookie context."""
+
+    def __init__(self) -> None:
+        self._lock = asyncio.Lock()
+        self._playwright: Playwright | None = None
+        self._browser: Browser | None = None
+
+    async def new_context(self) -> BrowserContext:
+        async with self._lock:
+            if self._browser is None or not self._browser.is_connected():
+                await self.aclose()
+                self._playwright = await async_playwright().start()
+                self._browser = await self._playwright.chromium.launch(headless=True)
+            return await self._browser.new_context()
+
+    async def aclose(self) -> None:
+        try:
+            if self._browser is not None:
+                await self._browser.close()
+        finally:
+            self._browser = None
+            if self._playwright is not None:
+                await self._playwright.stop()
+                self._playwright = None
+
+
 class PlaywrightQuickTicketsBrowserDriver:
     """Perform one checkout in a fresh cookie context without automatic retries."""
 
@@ -79,12 +107,14 @@ class PlaywrightQuickTicketsBrowserDriver:
         now: Callable[[], datetime] | None = None,
         headless: bool = True,
         timeout_ms: int = 30_000,
+        runtime: QuickTicketsBrowserRuntime | None = None,
     ) -> None:
         self._theatre_alias = theatre_alias
         self._payment_terminal_choice = payment_terminal_choice
         self._now = now or (lambda: datetime.now(UTC))
         self._headless = headless
         self._timeout_ms = timeout_ms
+        self._runtime = runtime
         self._playwright: Playwright | None = None
         self._browser: Browser | None = None
         self._context: BrowserContext | None = None
@@ -188,7 +218,7 @@ class PlaywrightQuickTicketsBrowserDriver:
             amount, commission, total = await self._calculate_total(page, form)
             if amount != request.expected_total or total != amount + commission:
                 return _requires_action(CheckoutErrorCode.AMOUNT_MISMATCH)
-            if total > request.reserved_total:
+            if not request.price_unlimited and total > request.reserved_total:
                 return _requires_action(CheckoutErrorCode.AMOUNT_MISMATCH)
             submitters = form.locator(
                 'button[type="submit"]:visible:not([disabled]), '
@@ -238,9 +268,12 @@ class PlaywrightQuickTicketsBrowserDriver:
         self._playwright = None
 
     async def _start(self, request: CheckoutRequest) -> Page:
-        self._playwright = await async_playwright().start()
-        self._browser = await self._playwright.chromium.launch(headless=self._headless)
-        self._context = await self._browser.new_context()
+        if self._runtime is None:
+            self._playwright = await async_playwright().start()
+            self._browser = await self._playwright.chromium.launch(headless=self._headless)
+            self._context = await self._browser.new_context()
+        else:
+            self._context = await self._runtime.new_context()
         self._page = await self._context.new_page()
         self._page.set_default_timeout(self._timeout_ms)
         session_url = (

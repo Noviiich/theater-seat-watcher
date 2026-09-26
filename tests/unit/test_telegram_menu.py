@@ -41,6 +41,7 @@ def test_ticket_count_actions_offer_one_through_six_without_price_input() -> Non
     keyboard = _ticket_count_actions()
 
     assert [[button.text for button in row] for row in keyboard.inline_keyboard] == [
+        ["70 билетов — каждый отдельным заказом"],
         ["1", "2", "3"],
         ["4", "5", "6"],
         ["Отмена"],
@@ -80,6 +81,15 @@ def test_dry_run_subscription_keeps_owners_limits_for_selection() -> None:
     assert second.buyer_id == "456"
     assert second.max_ticket_price == Money(250_000)
     assert second.max_order_total == Money(500_000)
+
+
+def test_organization_subscription_has_seventy_slots_and_one_ticket_per_order() -> None:
+    subscription = _new_button_subscription(70, "123", live=True, individual_orders=True)
+    assert subscription.ticket_count == 70
+    assert subscription.order_ticket_count == 1
+    assert subscription.price_unlimited
+    assert subscription.max_ticket_price is None
+    assert subscription.max_active_orders is None
 
 
 def test_limit_input_accepts_exact_kopecks_and_rejects_invalid_amounts() -> None:

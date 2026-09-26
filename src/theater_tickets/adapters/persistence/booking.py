@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
@@ -89,13 +90,25 @@ class SqlAlchemyBookingRepository:
                     .where(CandidateModel.id == candidate_id)
                 )
             ).one_or_none()
-        if row is None:
-            return None
-        candidate, subscription, buyer, session = row
+            if row is None:
+                return None
+            candidate, subscription, buyer, session = row
+            excluded = frozenset(
+                await database.scalars(
+                    select(CandidateModel.target_seat_id).where(
+                        CandidateModel.buyer_id == candidate.buyer_id,
+                        CandidateModel.session_id == candidate.session_id,
+                        CandidateModel.id != candidate.id,
+                        CandidateModel.target_seat_id.is_not(None),
+                    )
+                )
+            )
         return BookingCandidateContext(
             candidate_id=candidate.id,
             buyer_id=buyer.id,
             subscription_version=subscription.version,
+            target_seat_id=candidate.target_seat_id,
+            excluded_seat_ids=frozenset(value for value in excluded if value is not None),
             buyer=_checkout_buyer(buyer),
             subscription=_subscription_from_model(subscription, buyer.telegram_user_id),
             session=Session(
@@ -255,6 +268,8 @@ class SqlAlchemyBookingRepository:
                 or candidate.subscription_version
             )
             candidate.tracking_state = "dry_run_completed"
+            if candidate.ticket_no > 0 and len(report.selected_seat_ids) == 1:
+                candidate.target_seat_id = report.selected_seat_ids[0]
             candidate.next_run_at = None
             candidate.stop_reason = report.state
 
@@ -295,6 +310,20 @@ class SqlAlchemyBookingRepository:
             intent.updated_at = now
             cycle.state = "rejected"
             cycle.ended_at = now
+            if candidate.ticket_no > 0:
+                confirmed = await database.scalar(
+                    select(OrderModel.id)
+                    .join(
+                        CheckoutIntentModel, CheckoutIntentModel.id == OrderModel.checkout_intent_id
+                    )
+                    .join(
+                        RenewalCycleModel,
+                        RenewalCycleModel.id == CheckoutIntentModel.renewal_cycle_id,
+                    )
+                    .where(RenewalCycleModel.candidate_id == candidate.id)
+                )
+                if confirmed is None:
+                    candidate.target_seat_id = None
             if stop:
                 candidate.tracking_state = "stopped"
                 candidate.next_run_at = None
@@ -315,6 +344,20 @@ class SqlAlchemyBookingRepository:
             candidate.tracking_state = "needs_attention"
             candidate.next_run_at = None
             candidate.stop_reason = error_code
+            if error_code in {"captcha", "auth_expired", "contract_changed"}:
+                await database.execute(
+                    update(CandidateModel)
+                    .where(
+                        CandidateModel.buyer_id == candidate.buyer_id,
+                        CandidateModel.session_id == candidate.session_id,
+                        CandidateModel.tracking_state.in_(
+                            ("queued", "renewal_claimed", "waiting_availability")
+                        ),
+                    )
+                    .values(
+                        tracking_state="needs_attention", next_run_at=None, stop_reason=error_code
+                    )
+                )
 
     async def _checkout_graph(
         self, database: AsyncSession, intent_id: str
@@ -361,13 +404,10 @@ class SqlAlchemyBatchSummaryScheduler:
                     .order_by(SessionModel.starts_at, CandidateModel.id)
                 )
             ).all()
-        grouped: dict[tuple[str, str], list[BatchSessionResult]] = {}
+        grouped: dict[tuple[str, str], list[tuple[CandidateModel, SessionModel]]] = {}
         for candidate, session in rows:
             grouped.setdefault((candidate.discovery_batch_id, candidate.buyer_id), []).append(
-                BatchSessionResult(
-                    session.title,
-                    self._status(candidate.tracking_state, candidate.stop_reason),
-                )
+                (candidate, session)
             )
         outbox_ids: list[str] = []
         for (batch_id, buyer_id), results in grouped.items():
@@ -375,7 +415,7 @@ class SqlAlchemyBatchSummaryScheduler:
                 await self._writer.enqueue_batch_summary(
                     discovery_batch_id=batch_id,
                     buyer_id=buyer_id,
-                    results=tuple(results),
+                    results=self._results(results),
                     recorded_at=now,
                 )
             )
@@ -402,17 +442,18 @@ class SqlAlchemyBatchSummaryScheduler:
                 (candidate, session)
             )
         outbox_ids: list[str] = []
-        unfinished = {"queued", "processing", "dry_run_queued", "dry_run_processing"}
+        unfinished = {
+            "queued",
+            "processing",
+            "renewal_claimed",
+            "dry_run_queued",
+            "dry_run_claimed",
+            "dry_run_processing",
+        }
         for (batch_id, buyer_id), values in grouped.items():
             if any(candidate.tracking_state in unfinished for candidate, _ in values):
                 continue
-            results = tuple(
-                BatchSessionResult(
-                    session.title,
-                    self._status(candidate.tracking_state, candidate.stop_reason),
-                )
-                for candidate, session in values
-            )
+            results = self._results(values)
             outbox_ids.append(
                 await self._writer.enqueue_batch_summary(
                     discovery_batch_id=batch_id,
@@ -423,12 +464,31 @@ class SqlAlchemyBatchSummaryScheduler:
             )
         return tuple(outbox_ids)
 
+    @classmethod
+    def _results(
+        cls, values: list[tuple[CandidateModel, SessionModel]]
+    ) -> tuple[BatchSessionResult, ...]:
+        counts = Counter(
+            (
+                session.id,
+                session.title,
+                cls._status(candidate.tracking_state, candidate.stop_reason),
+            )
+            for candidate, session in values
+        )
+        return tuple(
+            BatchSessionResult(title, status if count == 1 else f"{status}: {count} билетов")
+            for (_, title, status), count in counts.items()
+        )
+
     @staticmethod
     def _status(state: str, reason: str | None) -> str:
+        if reason == "sale_quantity_limit":
+            return "лимит продавца меньше запрошенного количества; оформление остановлено"
         return {
             "renewal_waiting": "ссылка на оплату подготовлена",
             "awaiting_payment": "ссылка на оплату подготовлена",
-            "waiting_availability": "нет подходящих соседних мест",
+            "waiting_availability": "нет подходящих свободных мест",
             "waiting_budget": "ожидание доступного бюджета",
             "dry_run_completed": f"dry-run: {reason or 'решение сохранено'}",
             "needs_attention": "требуется действие пользователя",

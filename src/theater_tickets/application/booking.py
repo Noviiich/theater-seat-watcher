@@ -53,6 +53,8 @@ class BookingCandidateContext:
     buyer: CheckoutBuyer | None
     subscription: Subscription
     session: Session
+    target_seat_id: str | None = None
+    excluded_seat_ids: frozenset[str] = frozenset()
 
 
 @dataclass(frozen=True, slots=True)
@@ -160,9 +162,17 @@ class CandidateEvaluator:
         ):
             return BookingEvaluation(EvaluationState.STOPPED, "filters_changed")
         capabilities = await self._provider.fetch_sale_capabilities(session.key)
+        if (
+            context.subscription.individual_orders
+            and capabilities.sell_available
+            and context.subscription.ticket_count > capabilities.sell_max
+        ):
+            return BookingEvaluation(EvaluationState.NEEDS_ATTENTION, "sale_quantity_limit")
         if not capabilities.allows_regular_sale(context.subscription.ticket_count):
             return BookingEvaluation(EvaluationState.WAITING_AVAILABILITY, "sale_unavailable")
         inventory = await self._provider.fetch_inventory(session.key)
+        if context.subscription.individual_orders:
+            return _evaluate_individual(context, session, inventory)
         if inventory and all(seat.is_unnumbered for seat in inventory):
             if context.subscription.seat_profile_id != "auto":
                 return BookingEvaluation(EvaluationState.NEEDS_ATTENTION, "profile_mismatch")
@@ -198,6 +208,38 @@ class CandidateEvaluator:
             session=session,
             group=selected,
         )
+
+
+def _evaluate_individual(
+    context: BookingCandidateContext, session: Session, inventory: tuple[Seat, ...]
+) -> BookingEvaluation:
+    """Take the first eligible place without topology inference, scoring or sorting."""
+    if len({seat.provider_id for seat in inventory}) != len(inventory) or any(
+        seat.hall_id != session.hall_id for seat in inventory
+    ):
+        return BookingEvaluation(EvaluationState.NEEDS_ATTENTION, "inventory_mismatch")
+    for seat in inventory:
+        if seat.availability is not SeatAvailability.FREE:
+            continue
+        if seat.provider_id in context.excluded_seat_ids:
+            continue
+        if context.target_seat_id is not None and seat.provider_id != context.target_seat_id:
+            continue
+        group = SeatGroup(f"individual:{seat.provider_id}", (seat,), Decimal(0))
+        if not context.subscription.allows_seat_group(group):
+            continue
+        label = (
+            seat.block
+            if seat.is_unnumbered
+            else f"{seat.block}, ряд {seat.row_label}, место {seat.seat_label}"
+        )
+        return BookingEvaluation(
+            EvaluationState.READY,
+            "selected_individual",
+            session,
+            RankedGroup(group, "individual", None, 0, label),
+        )
+    return BookingEvaluation(EvaluationState.WAITING_AVAILABILITY, "no_available_single_seat")
 
 
 def _evaluate_unnumbered(

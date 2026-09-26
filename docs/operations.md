@@ -4,7 +4,9 @@
 
 Production entrypoint запускает polling публичных страниц QuickTickets,
 Telegram long polling и persistent runtime. Режим по умолчанию — `dry_run`.
-Ограниченный `live` доступен только с платёжным терминалом и денежными лимитами каждой подписки;
+`Live` требует настроенного платёжного терминала. Прежние подписки задают
+денежные пределы; [режим 70 отдельных билетов](organization-booking.md) требует
+явного подтверждения отсутствия ограничения суммы и соблюдает предел продавца;
 контейнер сам не создаёт live-подписку. Реальное оформление включается отдельным
 подтверждением её владельца в Telegram. Оплата всегда выполняется пользователем.
 
@@ -21,8 +23,8 @@ Telegram long polling и persistent runtime. Режим по умолчанию 
    кнопкой в Telegram.
 2. Для обычной работы оставить `BOOKING_MODE=dry_run`. Для контролируемого
    запуска задать `BOOKING_MODE=live`, проверенный
-   `QUICKTICKETS_PAYMENT_TERMINAL_CHOICE`. Денежные лимиты каждый пользователь
-   вводит при создании своей подписки в Telegram. `DATABASE_URL` в Compose указывает
+   `QUICKTICKETS_PAYMENT_TERMINAL_CHOICE`. Денежные лимиты либо их отсутствие
+   в режиме организации подтверждаются в Telegram. `DATABASE_URL` в Compose указывает
    на `/app/data/theater_tickets.sqlite3`.
 3. Создать проверенный `config/halls/<profile_id>.yaml` по
    [алгоритму мест](seat-selection.md) и примеру в `config/halls/README.md`.

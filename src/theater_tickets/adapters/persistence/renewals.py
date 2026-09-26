@@ -81,7 +81,7 @@ class SqlAlchemyRenewalRepository:
                         CandidateModel.next_run_at <= now,
                     ),
                 )
-                .order_by(CandidateModel.next_run_at, CandidateModel.id)
+                .order_by(CandidateModel.next_run_at, CandidateModel.ticket_no, CandidateModel.id)
                 .limit(limit)
             )
             claimed_ids = tuple(
@@ -110,7 +110,9 @@ class SqlAlchemyRenewalRepository:
                         CandidateModel.id.in_(claimed_ids),
                         CandidateModel.tracking_state == "renewal_claimed",
                     )
-                    .order_by(CandidateModel.next_run_at, CandidateModel.id)
+                    .order_by(
+                        CandidateModel.next_run_at, CandidateModel.ticket_no, CandidateModel.id
+                    )
                 )
             ).all()
             tasks: list[RenewalTask] = []
@@ -170,6 +172,9 @@ class SqlAlchemyRenewalRepository:
                 raise LookupError("renewal cycle is not current")
             cycle.started_at = held_at
             cycle.due_at = due_at
+            if candidate.tracking_state == "stopped":
+                cycle.state = "held"
+                return
             if task.max_cycles_per_session is not None and cycle_no >= task.max_cycles_per_session:
                 cycle.state = "held"
                 self._stop_candidate(candidate, "max_cycles_per_session")

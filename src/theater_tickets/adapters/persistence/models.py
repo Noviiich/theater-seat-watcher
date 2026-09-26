@@ -113,7 +113,10 @@ class SubscriptionBaselineModel(Base):
 
 class CandidateModel(Base):
     __tablename__ = "candidates"
-    __table_args__ = (UniqueConstraint("buyer_id", "session_id"),)
+    __table_args__ = (
+        UniqueConstraint("buyer_id", "session_id", "ticket_no"),
+        UniqueConstraint("buyer_id", "session_id", "target_seat_id"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     buyer_id: Mapped[str] = mapped_column(ForeignKey("buyers.id"), nullable=False)
@@ -126,6 +129,8 @@ class CandidateModel(Base):
     booking_mode: Mapped[str] = mapped_column(String(16), nullable=False, default="dry_run")
     tracking_state: Mapped[str] = mapped_column(String(64), nullable=False, default="queued")
     current_cycle_no: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    ticket_no: Mapped[int] = mapped_column(Integer, nullable=False, default=0, server_default="0")
+    target_seat_id: Mapped[str | None] = mapped_column(String(255))
     next_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     watch_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     stop_reason: Mapped[str | None] = mapped_column(String(255))
@@ -153,6 +158,10 @@ class CheckoutIntentModel(Base):
 
     __tablename__ = "checkout_intents"
     __table_args__ = (UniqueConstraint("renewal_cycle_id", "attempt_no"),)
+
+    price_unlimited: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="0"
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     renewal_cycle_id: Mapped[str] = mapped_column(ForeignKey("renewal_cycles.id"), nullable=False)

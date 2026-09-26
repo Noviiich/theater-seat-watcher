@@ -30,6 +30,7 @@ class PlanningState(StrEnum):
     SKIPPED_LIMIT = "skipped_limit"
     ALREADY_ACTIVE = "already_active"
     NOT_FOUND = "not_found"
+    SEAT_UNAVAILABLE = "seat_unavailable"
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,7 +65,7 @@ class BookingPlanner:
     ) -> PlanningOutcome:
         if reserved_total.minor_units <= 0:
             raise ValueError("reserved_total must be positive")
-        if len(selected_seat_ids) != subscription.ticket_count or len(
+        if len(selected_seat_ids) != subscription.order_ticket_count or len(
             set(selected_seat_ids)
         ) != len(selected_seat_ids):
             raise ValueError("selected_seat_ids must contain the requested unique seat count")
@@ -115,11 +116,32 @@ class BookingPlanner:
 
         candidate = await database.get(CandidateModel, candidate_id)
         assert candidate is not None
+        if subscription.individual_orders:
+            if not 1 <= candidate.ticket_no <= subscription.ticket_count:
+                raise ValueError("candidate ticket slot is outside the subscription quantity")
+            if (
+                candidate.target_seat_id is not None
+                and candidate.target_seat_id != selected_seat_ids[0]
+            ):
+                raise ValueError("individual ticket must keep its assigned seat")
+            occupied = await database.scalar(
+                select(CandidateModel.id).where(
+                    CandidateModel.buyer_id == candidate.buyer_id,
+                    CandidateModel.session_id == candidate.session_id,
+                    CandidateModel.id != candidate.id,
+                    CandidateModel.target_seat_id == selected_seat_ids[0],
+                )
+            )
+            if occupied is not None:
+                candidate.tracking_state = "waiting_availability"
+                return PlanningOutcome(PlanningState.SEAT_UNAVAILABLE, candidate_id)
         batch_sessions = await self._batch_session_count(database, candidate.discovery_batch_id)
         candidate_has_batch_slot = await database.scalar(
-            select(BudgetAllocationModel.id).where(
+            select(BudgetAllocationModel.id)
+            .join(CandidateModel, CandidateModel.id == BudgetAllocationModel.candidate_id)
+            .where(
                 BudgetAllocationModel.discovery_batch_id == candidate.discovery_batch_id,
-                BudgetAllocationModel.candidate_id == candidate.id,
+                CandidateModel.session_id == candidate.session_id,
             )
         )
         if (
@@ -171,6 +193,7 @@ class BookingPlanner:
             expected_total_minor=quoted_total.minor_units,
             currency=quoted_total.currency,
             expected_hold_ttl_seconds=subscription.renewal_policy.expected_hold_ttl_seconds,
+            price_unlimited=subscription.price_unlimited,
             created_at=now,
         )
         database.add(intent)
@@ -187,6 +210,8 @@ class BookingPlanner:
         )
         database.add(allocation)
         candidate.current_cycle_no = cycle_no
+        if subscription.individual_orders:
+            candidate.target_seat_id = selected_seat_ids[0]
         candidate.tracking_state = "submitting"
         return PlanningOutcome(PlanningState.PLANNED, candidate_id, cycle_no, intent.id)
 
@@ -250,8 +275,10 @@ class BookingPlanner:
     async def _batch_session_count(self, database: AsyncSession, batch_id: str) -> int:
         return int(
             await database.scalar(
-                select(func.count(func.distinct(BudgetAllocationModel.candidate_id))).where(
-                    BudgetAllocationModel.discovery_batch_id == batch_id
+                select(func.count(func.distinct(CandidateModel.session_id)))
+                .join(
+                    BudgetAllocationModel, BudgetAllocationModel.candidate_id == CandidateModel.id
                 )
+                .where(BudgetAllocationModel.discovery_batch_id == batch_id)
             )
         )

@@ -78,14 +78,30 @@ def render_user_status(
     ]
     if visible:
         lines.append("Найденные сеансы:")
-        for item in visible[:5]:
+        sessions: dict[tuple[str, datetime | None], list[CandidateStatus]] = {}
+        for item in visible:
+            sessions.setdefault((item.title, item.starts_at), []).append(item)
+        for values in list(sessions.values())[:5]:
+            item = values[0]
             title = item.title
             if item.starts_at is not None:
                 _aware(item.starts_at)
                 title += f" · {item.starts_at.astimezone(MOSCOW):%d.%m.%Y %H:%M} МСК"
-            lines.append(f"• {title}: {_user_candidate_state(item, now=now)}")
-        if len(visible) > 5:
-            lines.append(f"И ещё сеансов: {len(visible) - 5}.")
+            if len(values) == 1:
+                lines.append(f"• {title}: {_user_candidate_state(item, now=now)}")
+            else:
+                ready = sum(
+                    value.state in {"awaiting_payment", "renewal_waiting"} for value in values
+                )
+                attention = sum(value.state == "needs_attention" for value in values)
+                lines.append(
+                    f"• {title}: задач {len(values)}, ссылок подготовлено {ready}, "
+                    f"требуют внимания {attention}."
+                )
+                if any(value.stop_reason == "sale_quantity_limit" for value in values):
+                    lines.append("Лимит продавца меньше запрошенного количества билетов.")
+        if len(sessions) > 5:
+            lines.append(f"И ещё сеансов: {len(sessions) - 5}.")
     elif active:
         lines.append("Подходящих новых сеансов пока нет.")
 
@@ -106,11 +122,13 @@ def _user_candidate_state(item: CandidateStatus, *, now: datetime) -> str:
         "renewal_claimed": "подбираются места для новой ссылки",
         "renewal_waiting": "новая ссылка будет подготовлена после окончания текущего удержания",
         "awaiting_payment": "ссылка на оплату подготовлена; проверьте сообщения бота",
-        "waiting_availability": "соседних мест пока нет; поиск продолжится",
+        "waiting_availability": "подходящих свободных мест пока нет; поиск продолжится",
         "waiting_budget": "достигнут лимит стоимости или заказов; поиск продолжится",
         "needs_attention": "нужно ваше участие; проверьте сообщения бота",
     }
     result = states.get(item.state, "проверяется")
+    if item.stop_reason == "sale_quantity_limit":
+        result = "лимит продавца меньше запрошенного количества билетов"
     if item.next_run_at is not None and item.state not in {"needs_attention"}:
         _aware(item.next_run_at)
         remaining = max(0, int((item.next_run_at - now).total_seconds()))
@@ -162,7 +180,7 @@ def render_status(
         lines.append("Активных или завершённых сеансов-кандидатов нет.")
         return "\n".join(lines)
     lines.append("Сеансы:")
-    for item in status.candidates:
+    for item in status.candidates[:8]:
         details = [f"цикл №{item.current_cycle_no}", _state_label(item.state)]
         if item.next_run_at is not None:
             remaining = max(0, int((item.next_run_at - now).total_seconds()))
@@ -173,6 +191,8 @@ def render_status(
         if item.stop_reason:
             details.append(f"причина: {item.stop_reason}")
         lines.append(f"• {item.title} [{item.candidate_id}]: " + "; ".join(details) + ".")
+    if len(status.candidates) > 8:
+        lines.append(f"Ещё задач: {len(status.candidates) - 8}. Общий прогресс — в меню «Статус».")
     return "\n".join(lines)
 
 

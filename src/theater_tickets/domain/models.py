@@ -251,12 +251,19 @@ class Subscription:
     time_from: time | None = None
     time_to: time | None = None
     renewal_policy: RenewalPolicy = field(default_factory=RenewalPolicy)
+    individual_orders: bool = False
 
     def __post_init__(self) -> None:
         for name in ("subscription_id", "buyer_id", "theatre_alias", "seat_profile_id"):
             object.__setattr__(self, name, _non_empty_identifier(getattr(self, name), name=name))
         if self.ticket_count <= 0:
             raise DomainValidationError("ticket_count must be positive")
+        if (
+            self.individual_orders
+            and self.max_order_total is None
+            and (self.max_batch_total is not None or self.max_active_total is not None)
+        ):
+            raise DomainValidationError("aggregate budgets require an order limit for fees")
         if self.max_sessions_per_batch is not None and self.max_sessions_per_batch <= 0:
             raise DomainValidationError("max_sessions_per_batch must be positive")
         if self.max_active_orders is not None and self.max_active_orders <= 0:
@@ -303,10 +310,18 @@ class Subscription:
 
     def allows_seat_group(self, group: SeatGroup) -> bool:
         """Apply the known pre-check limits before a provider checkout quote."""
-        if len(group.seats) != self.ticket_count:
+        if len(group.seats) != self.order_ticket_count:
             return False
         if self.max_ticket_price and any(
             seat.price > self.max_ticket_price for seat in group.seats
         ):
             return False
         return not self.max_order_total or group.total <= self.max_order_total
+
+    @property
+    def order_ticket_count(self) -> int:
+        return 1 if self.individual_orders else self.ticket_count
+
+    @property
+    def price_unlimited(self) -> bool:
+        return self.individual_orders and self.max_order_total is None

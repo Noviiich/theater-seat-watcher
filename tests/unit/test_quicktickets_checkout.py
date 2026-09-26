@@ -95,6 +95,22 @@ def test_confirmed_order_may_include_commission_within_reserved_limit() -> None:
     assert result.state is CheckoutState.CONFIRMED
 
 
+def test_unlimited_price_still_requires_exact_seats_currency_and_complete_order() -> None:
+    adapter = _adapter(BookingMode.LIVE, FakeCheckoutTransport([]), MemoryCheckoutStageRecorder())
+    request = replace(_request(), price_unlimited=True)
+    observation = replace(_confirmed(), total=Money(900_000))
+    assert adapter.validate_observation(request, observation).state is CheckoutState.CONFIRMED
+    for invalid in (
+        replace(observation, seat_ids=("another-seat",)),
+        replace(observation, total=Money(900_000, "USD")),
+        replace(observation, total=Money(1)),
+        replace(observation, payment_url=None),
+        replace(observation, expires_at=None),
+    ):
+        assert adapter.validate_observation(request, invalid).state is CheckoutState.AMBIGUOUS
+    assert adapter.validate_observation(_request(), observation).state is CheckoutState.AMBIGUOUS
+
+
 @pytest.mark.parametrize(
     ("observation", "error_code"),
     [

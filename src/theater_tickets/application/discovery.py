@@ -156,24 +156,31 @@ class DiscoveryService:
             )
             if existing is not None:
                 continue
-            candidate_id = str(uuid4())
-            database.add(
-                CandidateModel(
-                    id=candidate_id,
-                    buyer_id=persisted_subscription.buyer_id,
-                    subscription_id=subscription.subscription_id,
-                    session_id=persisted.id,
-                    discovery_batch_id=batch.id,
-                    subscription_version=persisted_subscription.version,
-                    booking_mode=subscription.booking_mode.value,
-                    tracking_state=(
-                        "queued" if subscription.booking_mode.value == "live" else "dry_run_queued"
-                    ),
-                    current_cycle_no=0,
-                    watch_until=item.starts_at,
-                )
+            ticket_numbers = (
+                range(1, subscription.ticket_count + 1) if subscription.individual_orders else (0,)
             )
-            candidate_ids.append(candidate_id)
+            for ticket_no in ticket_numbers:
+                candidate_id = str(uuid4())
+                database.add(
+                    CandidateModel(
+                        id=candidate_id,
+                        buyer_id=persisted_subscription.buyer_id,
+                        subscription_id=subscription.subscription_id,
+                        session_id=persisted.id,
+                        discovery_batch_id=batch.id,
+                        subscription_version=persisted_subscription.version,
+                        booking_mode=subscription.booking_mode.value,
+                        tracking_state=(
+                            "queued"
+                            if subscription.booking_mode.value == "live"
+                            else "dry_run_queued"
+                        ),
+                        current_cycle_no=0,
+                        ticket_no=ticket_no,
+                        watch_until=item.starts_at,
+                    )
+                )
+                candidate_ids.append(candidate_id)
 
         return DiscoveryOutcome(
             baseline_established=False,

@@ -1,5 +1,10 @@
 # Структура проекта
 
+Режим [70 отдельных билетов](organization-booking.md) реализован в существующих
+domain/application/persistence/worker модулях; миграция `0015` добавляет номер
+слота и закреплённое место. Browser runtime в `adapters/quicktickets/browser.py`
+переиспользует Chromium, создавая отдельный контекст для каждого заказа.
+
 Сейчас уже существуют базовый Python-пакет, настройки, чистые модели домена,
 SQLite adapter, Alembic-миграции, сценарий discovery → checkout → outbox и
 устойчивый lifecycle фоновых задач с runtime-диагностикой. Добавлены production

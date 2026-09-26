@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 SQLITE_URL_PREFIX = "sqlite+aiosqlite:///"
-EXPECTED_SCHEMA_REVISION = "0014_telegram_per_session_limits"
+EXPECTED_SCHEMA_REVISION = "0015_individual_ticket_orders"
 
 
 def check_database(database_url: str) -> str:

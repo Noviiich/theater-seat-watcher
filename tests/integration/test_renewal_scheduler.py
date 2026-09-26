@@ -204,9 +204,7 @@ def test_upgrade_resumes_existing_one_cycle_live_subscription(tmp_path: Path) ->
     database = tmp_path / "live-upgrade.sqlite"
 
     async def seed() -> None:
-        factory, dispose = await _setup_database(
-            database, candidate_count=1, revision="0012_soft_delete_subscriptions"
-        )
+        factory, dispose = await _setup_database(database, candidate_count=1)
         held_at = datetime(2026, 9, 24, 9, tzinfo=UTC)
         async with factory() as session, session.begin():
             subscription = await session.get(SubscriptionModel, "subscription")
@@ -261,6 +259,8 @@ def test_upgrade_resumes_existing_one_cycle_live_subscription(tmp_path: Path) ->
     asyncio.run(seed())
     config = Config("alembic.ini")
     config.set_main_option("sqlalchemy.url", f"sqlite:///{database}")
+    # Seed using the current ORM, then remove newer columns before testing the upgrade.
+    command.downgrade(config, "0012_soft_delete_subscriptions")
     command.upgrade(config, "head")
 
     async def verify() -> None:
@@ -282,9 +282,7 @@ def test_upgrade_removes_telegram_batch_caps_and_requeues_skipped_session(tmp_pa
     database = tmp_path / "telegram-limits-upgrade.sqlite"
 
     async def seed() -> None:
-        factory, dispose = await _setup_database(
-            database, candidate_count=2, revision="0013_enable_live_renewals"
-        )
+        factory, dispose = await _setup_database(database, candidate_count=2)
         async with factory() as session, session.begin():
             subscription = await session.get(SubscriptionModel, "subscription")
             skipped = await session.get(CandidateModel, "candidate-2")
@@ -305,6 +303,7 @@ def test_upgrade_removes_telegram_batch_caps_and_requeues_skipped_session(tmp_pa
     asyncio.run(seed())
     config = Config("alembic.ini")
     config.set_main_option("sqlalchemy.url", f"sqlite:///{database}")
+    command.downgrade(config, "0013_enable_live_renewals")
     command.upgrade(config, "head")
 
     async def verify() -> None:

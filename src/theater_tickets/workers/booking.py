@@ -141,7 +141,7 @@ class LiveCandidateProcessor:
                 RenewalProcessState.NEEDS_ATTENTION,
                 stop_reason="booking_mode_mismatch",
             )
-        if (
+        if not context.subscription.individual_orders and (
             context.subscription.max_ticket_price is None
             or context.subscription.max_order_total is None
         ):
@@ -172,6 +172,8 @@ class LiveCandidateProcessor:
             )
         if planned.state is PlanningState.WAITING_BUDGET:
             return RenewalProcessResult(RenewalProcessState.WAITING_BUDGET)
+        if planned.state is PlanningState.SEAT_UNAVAILABLE:
+            return RenewalProcessResult(RenewalProcessState.WAITING_AVAILABILITY)
         if planned.state is PlanningState.SKIPPED_LIMIT:
             return RenewalProcessResult(
                 RenewalProcessState.STOPPED,
@@ -190,6 +192,7 @@ class LiveCandidateProcessor:
                 context.subscription.renewal_policy.expected_hold_ttl_seconds
             ),
             buyer=buyer,
+            price_unlimited=context.subscription.price_unlimited,
         )
         checkout_started = monotonic()
         result = await self._checkout.submit(request)

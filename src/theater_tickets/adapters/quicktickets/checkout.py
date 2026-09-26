@@ -210,7 +210,9 @@ class QuickTicketsCheckoutAdapter:
                 CheckoutState.AMBIGUOUS,
                 error_code=CheckoutErrorCode.AMOUNT_MISMATCH,
             )
-        if observation.total > request.reserved_total:
+        if observation.total.currency != request.expected_total.currency or (
+            not request.price_unlimited and observation.total > request.reserved_total
+        ):
             return CheckoutResult(
                 CheckoutState.AMBIGUOUS,
                 error_code=CheckoutErrorCode.AMOUNT_MISMATCH,

@@ -114,6 +114,7 @@ class SqlAlchemyRecoveryRequestLoader:
                         CheckoutIntentModel.reserved_total_minor,
                         CheckoutIntentModel.currency,
                         CheckoutIntentModel.expected_hold_ttl_seconds,
+                        CheckoutIntentModel.price_unlimited,
                         BuyerModel.lastname,
                         BuyerModel.firstname,
                         BuyerModel.middlename,
@@ -142,6 +143,7 @@ class SqlAlchemyRecoveryRequestLoader:
             reserved_total_minor,
             currency,
             expected_hold_ttl_seconds,
+            price_unlimited,
             lastname,
             firstname,
             middlename,
@@ -170,4 +172,5 @@ class SqlAlchemyRecoveryRequestLoader:
             reserved_total=Money(reserved_total_minor, currency),
             expected_hold_ttl_seconds=expected_hold_ttl_seconds,
             buyer=buyer,
+            price_unlimited=price_unlimited,
         )

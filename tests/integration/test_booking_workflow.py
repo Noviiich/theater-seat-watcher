@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import sqlite3
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -893,6 +894,408 @@ def _subscription(mode: BookingMode, *, max_sessions: int = 1, max_active: int =
         booking_mode=mode,
         renewal_policy=RenewalPolicy(),
     )
+
+
+def _organization(mode: BookingMode = BookingMode.LIVE, count: int = 70) -> Subscription:
+    return replace(
+        _subscription(mode),
+        ticket_count=count,
+        individual_orders=True,
+        seat_profile_id="auto",
+        max_ticket_price=None,
+        max_order_total=None,
+        max_batch_total=None,
+        max_active_orders=None,
+        max_active_total=None,
+    )
+
+
+def _organization_inventory(count: int = 80) -> tuple[Seat, ...]:
+    # No geometry or useful adjacency; expensive places appear first.
+    return tuple(
+        Seat(
+            str(index),
+            "hall",
+            f"block-{index}",
+            str(index),
+            "1",
+            Money(1_000_000 - index),
+            SeatAvailability.FREE,
+        )
+        for index in range(count)
+    )
+
+
+def test_seventy_individual_orders_survive_restart_and_do_not_replace_paid_seats(
+    tmp_path: Path,
+) -> None:
+    async def scenario() -> None:
+        now = datetime(2026, 9, 20, 9, tzinfo=UTC)
+        factory, engine = await _database(tmp_path / "seventy.sqlite")
+        subscription = _organization()
+        await _persist_subscription(factory, subscription)
+        base, new = (_session(name, now + timedelta(days=2)) for name in ("base", "new"))
+        provider = FakeProvider()
+        _configure(provider, (base, new), _organization_inventory())
+        provider.sale["new"] = SaleCapabilities(True, 100, False, 0, False, None, None)
+        clock = FakeClock(now)
+
+        class WithCommission(FakeCheckout):
+            async def submit(self, request: CheckoutRequest) -> CheckoutResult:
+                result = await super().submit(request)
+                assert result.order is not None
+                return replace(
+                    result, order=replace(result.order, total=result.order.total + Money(50))
+                )
+
+        class OfflineTelegram(FakeTelegram):
+            async def send(self, item: OutboxItem) -> str:
+                raise TimeoutError("offline")
+
+        checkout, telegram = WithCommission(clock), OfflineTelegram()
+        workflow = _workflow(factory, provider, checkout, telegram, clock)
+        await workflow.process_snapshot(
+            subscription=subscription,
+            sessions=(base,),
+            fetched_at=now,
+            fingerprint="baseline",
+            complete=True,
+        )
+        assert not checkout.calls
+        outcome = await workflow.process_snapshot(
+            subscription=subscription,
+            sessions=(base, new),
+            fetched_at=now,
+            fingerprint="new",
+            complete=True,
+        )
+        assert len(outcome.discovered_candidates) == 70
+        assert len(checkout.calls) == 20
+        workflow = _workflow(factory, provider, checkout, telegram, clock)
+        await workflow.recover_startup(now=now)
+        for _ in range(3):
+            await workflow.run_booking_due(now=now)
+        assert len(checkout.calls) == 70
+        assert {request.seat_ids for request in checkout.calls} == {(str(i),) for i in range(70)}
+        assert all(request.price_unlimited for request in checkout.calls)
+        async with factory() as db:
+            assert await db.scalar(select(func.count(OrderModel.id))) == 70
+            assert (
+                await db.scalar(
+                    select(func.count(OutboxMessageModel.id)).where(
+                        OutboxMessageModel.kind == "payment"
+                    )
+                )
+                == 70
+            )
+            assert (
+                await db.scalar(select(func.count(func.distinct(CandidateModel.target_seat_id))))
+                == 70
+            )
+            assert await db.scalar(
+                select(func.sum(BudgetAllocationModel.reserved_total_minor))
+            ) == sum(request.expected_total.minor_units + 50 for request in checkout.calls)
+        restored = await SqlAlchemyRecoveryRequestLoader(factory).load(checkout.calls[0].intent_id)
+        assert restored.price_unlimited
+        await workflow.process_snapshot(
+            subscription=subscription,
+            sessions=(base, new),
+            fetched_at=now,
+            fingerprint="replayed",
+            complete=True,
+        )
+        assert len(checkout.calls) == 70
+        sender = FakeTelegram()
+        delivery = _workflow(factory, provider, checkout, sender, clock)
+        clock.now += timedelta(seconds=31)
+        for _ in range(4):
+            await delivery.run_outbox_due(now=clock.now)
+        payments = [item for item in sender.sent if item.payment_url]
+        assert len(payments) == 70
+        assert len({item.payment_url for item in payments}) == 70
+        assert len(checkout.calls) == 70
+
+        # A paid/unavailable seat must not be replaced by the unused seats 70..79.
+        inventory = provider.inventory["new"]
+        provider.inventory["new"] = (
+            replace(inventory[0], availability=SeatAvailability.SOLD),
+        ) + inventory[1:]
+        clock.now = now + timedelta(seconds=1201)
+        for _ in range(4):
+            await workflow.run_booking_due(now=clock.now)
+        assert len(checkout.calls) == 139
+        assert {request.seat_ids for request in checkout.calls[70:]} == {
+            (str(i),) for i in range(1, 70)
+        }
+        await engine.dispose()
+
+    asyncio.run(scenario())
+
+
+def test_individual_unknown_order_keeps_its_seat_and_slot_after_restart(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        now = datetime(2026, 9, 20, 9, tzinfo=UTC)
+        factory, engine = await _database(tmp_path / "individual-unknown.sqlite")
+        subscription = _organization(count=4)
+        await _persist_subscription(factory, subscription)
+        new = _session("new", now + timedelta(days=2))
+        provider = FakeProvider()
+        _configure(provider, (new,), _organization_inventory(8))
+        clock = FakeClock(now)
+        checkout, telegram = FakeCheckout(clock), FakeTelegram()
+        checkout.outcomes = [CheckoutState.AMBIGUOUS]
+        workflow = _workflow(factory, provider, checkout, telegram, clock)
+        await workflow.process_snapshot(
+            subscription=subscription,
+            sessions=(),
+            fetched_at=now,
+            fingerprint="baseline",
+            complete=True,
+        )
+        await workflow.process_snapshot(
+            subscription=subscription,
+            sessions=(new,),
+            fetched_at=now,
+            fingerprint="new",
+            complete=True,
+        )
+        assert len(checkout.calls) == 4
+        assert len({request.seat_ids for request in checkout.calls}) == 4
+        workflow = _workflow(factory, provider, checkout, telegram, clock)
+        await workflow.recover_startup(now=now)
+        await workflow.run_booking_due(now=now)
+        assert len(checkout.calls) == 4
+        async with factory() as db:
+            unknown = await db.scalar(
+                select(CandidateModel).where(CandidateModel.tracking_state == "needs_attention")
+            )
+            assert unknown is not None and unknown.target_seat_id == "0"
+            assert (
+                await db.scalar(
+                    select(func.count(BudgetAllocationModel.id)).where(
+                        BudgetAllocationModel.active.is_(True)
+                    )
+                )
+                == 4
+            )
+        await engine.dispose()
+
+    asyncio.run(scenario())
+
+
+def test_individual_orders_respect_total_provider_limit_without_post(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        now = datetime(2026, 9, 20, 9, tzinfo=UTC)
+        factory, engine = await _database(tmp_path / "provider-limit.sqlite")
+        subscription = _organization()
+        await _persist_subscription(factory, subscription)
+        provider = FakeProvider()
+        new = _session("new", now + timedelta(days=2))
+        _configure(provider, (new,), _organization_inventory())  # provider limit is four
+        clock = FakeClock(now)
+        checkout, telegram = FakeCheckout(clock), FakeTelegram()
+        workflow = _workflow(factory, provider, checkout, telegram, clock)
+        await workflow.process_snapshot(
+            subscription=subscription,
+            sessions=(),
+            fetched_at=now,
+            fingerprint="baseline",
+            complete=True,
+        )
+        await workflow.process_snapshot(
+            subscription=subscription,
+            sessions=(new,),
+            fetched_at=now,
+            fingerprint="new",
+            complete=True,
+        )
+        for _ in range(3):
+            await workflow.run_booking_due(now=now)
+        assert not checkout.calls
+        async with factory() as db:
+            assert (
+                await db.scalar(
+                    select(func.count(CandidateModel.id)).where(
+                        CandidateModel.stop_reason == "sale_quantity_limit"
+                    )
+                )
+                == 70
+            )
+            assert await db.scalar(select(func.count(CheckoutIntentModel.id))) == 0
+        await engine.dispose()
+
+    asyncio.run(scenario())
+
+
+def test_individual_dry_run_selects_distinct_available_seats_without_writes(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        now = datetime(2026, 9, 20, 9, tzinfo=UTC)
+        factory, engine = await _database(tmp_path / "individual-dry.sqlite")
+        subscription = _organization(BookingMode.DRY_RUN, count=4)
+        await _persist_subscription(factory, subscription)
+        provider = FakeProvider()
+        new = _session("new", now + timedelta(days=2))
+        places = _organization_inventory(4)
+        _configure(
+            provider,
+            (new,),
+            (replace(places[0], availability=SeatAvailability.UNKNOWN),) + places[1:],
+        )
+        clock = FakeClock(now)
+        checkout, telegram = FakeCheckout(clock), FakeTelegram()
+        workflow = _workflow(factory, provider, checkout, telegram, clock)
+        await workflow.process_snapshot(
+            subscription=subscription,
+            sessions=(),
+            fetched_at=now,
+            fingerprint="baseline",
+            complete=True,
+        )
+        await workflow.process_snapshot(
+            subscription=subscription,
+            sessions=(new,),
+            fetched_at=now,
+            fingerprint="new",
+            complete=True,
+        )
+        assert not checkout.calls
+        async with factory() as db:
+            reports = (await db.scalars(select(DryRunReportModel))).all()
+            assert {tuple(report.selected_seat_ids) for report in reports} == {
+                (),
+                ("1",),
+                ("2",),
+                ("3",),
+            }
+            assert await db.scalar(select(func.count(CheckoutIntentModel.id))) == 0
+            assert await db.scalar(select(func.count(BudgetAllocationModel.id))) == 0
+        await engine.dispose()
+
+    asyncio.run(scenario())
+
+
+def test_individual_migration_preserves_existing_order_graph(tmp_path: Path) -> None:
+    path = tmp_path / "upgrade-individual.sqlite"
+
+    async def seed() -> None:
+        now = datetime(2026, 9, 20, 9, tzinfo=UTC)
+        factory, engine = await _database(path)
+        subscription = _subscription(BookingMode.LIVE)
+        await _persist_subscription(factory, subscription)
+        await _seed_live_candidate(factory, now)
+        async with SqlAlchemyUnitOfWork(factory) as uow:
+            assert uow.session is not None
+            planned = await BookingPlanner().plan(
+                uow.session,
+                candidate_id="candidate",
+                subscription=subscription,
+                reserved_total=Money(5000),
+                expected_total=Money(3000),
+                selected_seat_ids=("2", "3"),
+                now=now,
+            )
+        assert planned.checkout_intent_id is not None
+        await SqlAlchemyOrderOutboxWriter(factory).record_confirmed_order(
+            intent_id=planned.checkout_intent_id,
+            order=ConfirmedOrder(
+                "provider",
+                ("2", "3"),
+                Money(3100),
+                "https://quicktickets.ru/payment/order/fake",
+                now,
+                now + timedelta(seconds=1200),
+            ),
+            recorded_at=now,
+        )
+        await engine.dispose()
+
+    asyncio.run(seed())
+    config = Config("alembic.ini")
+    config.set_main_option("sqlalchemy.url", f"sqlite:///{path}")
+    command.downgrade(config, "0014_telegram_per_session_limits")
+    with sqlite3.connect(path) as connection:
+        before = connection.execute("SELECT id, dedup_key FROM outbox_messages").fetchall()
+    command.upgrade(config, "head")
+    with sqlite3.connect(path) as connection:
+        assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+        assert connection.execute("SELECT id, dedup_key FROM outbox_messages").fetchall() == before
+        assert connection.execute(
+            "SELECT ticket_no, target_seat_id FROM candidates"
+        ).fetchall() == [(0, None)]
+        assert connection.execute("SELECT total_minor FROM orders").fetchall() == [(3100,)]
+        assert connection.execute("SELECT price_unlimited FROM checkout_intents").fetchall() == [
+            (0,)
+        ]
+
+
+def test_pause_during_individual_checkout_preserves_stop(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        now = datetime(2026, 9, 20, 9, tzinfo=UTC)
+        factory, engine = await _database(tmp_path / "individual-pause.sqlite")
+        subscription = _organization(count=4)
+        await _persist_subscription(factory, subscription)
+        new = _session("new", now + timedelta(days=2))
+        provider = FakeProvider()
+        _configure(provider, (new,), _organization_inventory(8))
+        clock = FakeClock(now)
+
+        class PausingCheckout(FakeCheckout):
+            async def submit(self, request: CheckoutRequest) -> CheckoutResult:
+                result = await super().submit(request)
+                if len(self.calls) == 1:
+                    async with factory() as db, db.begin():
+                        candidate_id = await db.scalar(
+                            select(RenewalCycleModel.candidate_id)
+                            .join(
+                                CheckoutIntentModel,
+                                CheckoutIntentModel.renewal_cycle_id == RenewalCycleModel.id,
+                            )
+                            .where(CheckoutIntentModel.id == request.intent_id)
+                        )
+                        assert candidate_id is not None
+                        repository = SubscriptionRepository(db)
+                        assert await repository.stop_candidate(
+                            candidate_id=candidate_id, telegram_user_id="10"
+                        )
+                        assert await repository.set_enabled(
+                            subscription_id=subscription.subscription_id,
+                            telegram_user_id="10",
+                            enabled=False,
+                        )
+                return result
+
+        checkout = PausingCheckout(clock)
+        workflow = _workflow(factory, provider, checkout, FakeTelegram(), clock)
+        await workflow.process_snapshot(
+            subscription=subscription,
+            sessions=(),
+            fetched_at=now,
+            fingerprint="baseline",
+            complete=True,
+        )
+        await workflow.process_snapshot(
+            subscription=subscription,
+            sessions=(new,),
+            fetched_at=now,
+            fingerprint="new",
+            complete=True,
+        )
+        assert len(checkout.calls) == 1
+        async with factory() as db, db.begin():
+            stopped = await db.scalar(
+                select(CandidateModel).where(CandidateModel.target_seat_id == "0")
+            )
+            assert stopped is not None and stopped.tracking_state == "stopped"
+            assert stopped.stop_reason == "user_stop"
+            assert await SubscriptionRepository(db).set_enabled(
+                subscription_id=subscription.subscription_id, telegram_user_id="10", enabled=True
+            )
+        await workflow.run_booking_due(now=now)
+        assert len(checkout.calls) == 4
+        assert len({request.seat_ids for request in checkout.calls}) == 4
+        await engine.dispose()
+
+    asyncio.run(scenario())
 
 
 async def _persist_subscription(

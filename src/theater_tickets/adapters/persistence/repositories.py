@@ -261,6 +261,7 @@ class SubscriptionRepository:
 
 def _subscription_config(value: Subscription) -> dict[str, object]:
     return {
+        "individual_orders": value.individual_orders,
         "max_sessions_per_batch": value.max_sessions_per_batch,
         "max_ticket_price": value.max_ticket_price.minor_units if value.max_ticket_price else None,
         "max_order_total": value.max_order_total.minor_units if value.max_order_total else None,
@@ -297,6 +298,7 @@ def _subscription_from_model(model: SubscriptionModel, telegram_user_id: str) ->
         buyer_id=telegram_user_id,
         theatre_alias=model.theatre_alias,
         ticket_count=model.ticket_count,
+        individual_orders=config.get("individual_orders") is True,
         seat_profile_id=model.seat_profile_id,
         max_sessions_per_batch=(
             value if isinstance((value := config.get("max_sessions_per_batch", 1)), int) else None

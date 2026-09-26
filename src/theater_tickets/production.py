@@ -31,7 +31,10 @@ from theater_tickets.adapters.persistence.runtime import (
     SqlAlchemyKnownSessionSource,
     SqlAlchemyRuntimeStateStore,
 )
-from theater_tickets.adapters.quicktickets.browser import PlaywrightQuickTicketsBrowserDriver
+from theater_tickets.adapters.quicktickets.browser import (
+    PlaywrightQuickTicketsBrowserDriver,
+    QuickTicketsBrowserRuntime,
+)
 from theater_tickets.adapters.quicktickets.checkout import (
     QuickTicketsBrowserCheckoutTransport,
     QuickTicketsCheckoutAdapter,
@@ -90,6 +93,7 @@ async def run_production(settings: Settings) -> None:
         theatre_alias=settings.theatre_alias,
         min_request_interval=0.25,
     )
+    browser_runtime = QuickTicketsBrowserRuntime()
 
     def now() -> datetime:
         return datetime.now(UTC)
@@ -116,6 +120,7 @@ async def run_production(settings: Settings) -> None:
                     theatre_alias=settings.theatre_alias,
                     payment_terminal_choice=settings.quicktickets_payment_terminal_choice or "",
                     now=now,
+                    runtime=browser_runtime,
                 )
             )
         else:
@@ -128,6 +133,7 @@ async def run_production(settings: Settings) -> None:
 
         renewal_repository = SqlAlchemyRenewalRepository(session_factory)
         renewal_worker = RenewalWorker(
+            batch_size=70,
             repository=renewal_repository,
             processor=LiveCandidateProcessor(
                 session_factory=session_factory,
@@ -142,6 +148,7 @@ async def run_production(settings: Settings) -> None:
             ),
         )
         dry_run_worker = DryRunWorker(
+            batch_size=70,
             repository=booking_repository,
             contexts=booking_repository,
             evaluator=evaluator,
@@ -239,6 +246,7 @@ async def run_production(settings: Settings) -> None:
         )
         await run_until_signalled(supervisor)
     finally:
+        await browser_runtime.aclose()
         await client.aclose()
         await bot.session.close()
         await engine.dispose()

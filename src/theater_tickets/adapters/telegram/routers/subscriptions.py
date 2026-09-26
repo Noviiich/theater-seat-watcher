@@ -111,6 +111,14 @@ def _ticket_count_actions() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
+                InlineKeyboardButton(
+                    text="70 билетов — каждый отдельным заказом",
+                    callback_data="subscribe:organization",
+                )
+            ]
+        ]
+        + [
+            [
                 InlineKeyboardButton(text=str(count), callback_data=f"subscribe:count:{count}")
                 for count in range(first, first + 3)
             ]
@@ -217,12 +225,15 @@ def _subscription_line(item: Subscription, *, position: int) -> str:
     else:
         places = "мест"
     lines = [
-        f"🎭 Подписка №{position}: {count} {places} рядом",
+        f"🎭 Подписка №{position}: {count} {places}"
+        + (", по одному в заказе" if item.individual_orders else " рядом"),
         "🟢 Поиск включён" if item.enabled else "⏸ Поиск на паузе",
     ]
     if item.booking_mode is BookingMode.LIVE:
         lines.append(
-            "Для каждого нового подходящего сеанса попробую оформить отдельный заказ "
+            "На каждом новом сеансе оформлю до 70 отдельных заказов и пришлю ссылку на каждый."
+            if item.individual_orders
+            else "Для каждого нового подходящего сеанса попробую оформить отдельный заказ "
             "и пришлю ссылку на оплату."
         )
     else:
@@ -231,6 +242,8 @@ def _subscription_line(item: Subscription, *, position: int) -> str:
         lines.append(f"Цена билета на каждом сеансе — до {_rubles(item.max_ticket_price)} ₽.")
     if item.max_order_total is not None:
         lines.append(f"Каждый заказ — до {_rubles(item.max_order_total)} ₽.")
+    elif item.individual_orders:
+        lines.append("Без ограничений по цене и соседству. Ограничения продавца сохраняются.")
     return "\n".join(lines)
 
 
@@ -256,8 +269,9 @@ def _new_button_subscription(
     live: bool = False,
     max_ticket_price: Money | None = None,
     max_order_total: Money | None = None,
+    individual_orders: bool = False,
 ) -> Subscription:
-    if live and (max_ticket_price is None or max_order_total is None):
+    if live and not individual_orders and (max_ticket_price is None or max_order_total is None):
         raise ValueError("live subscription requires monetary limits")
     if (
         live
@@ -271,6 +285,7 @@ def _new_button_subscription(
         buyer_id=user_id,
         theatre_alias=THEATRE_ALIAS,
         ticket_count=ticket_count,
+        individual_orders=individual_orders,
         seat_profile_id="auto",
         max_sessions_per_batch=None,
         booking_mode=BookingMode.LIVE if live else BookingMode.DRY_RUN,
@@ -480,11 +495,12 @@ def build_subscription_router(
     @router.message(F.text == MENU_CREATE_SUBSCRIPTION)
     async def create_subscription_from_menu(message: Message, state: FSMContext) -> None:
         assert message.from_user is not None
+        await state.clear()
         await state.set_state(SubscriptionForm.selecting_ticket_count)
         live = booking_mode is RuntimeBookingMode.LIVE
         await message.answer(
-            "Сколько соседних мест искать? Выберите количество.\n\n"
-            "Схему зала бот определит сам. "
+            "Для организации: 70 билетов, каждый отдельным заказом, без ограничений по цене "
+            "и соседству. Либо выберите ниже количество соседних мест для одного заказа.\n\n"
             + (
                 "Перед реальным оформлением потребуется подтверждение."
                 if live
@@ -492,6 +508,43 @@ def build_subscription_router(
             ),
             reply_markup=_ticket_count_actions(),
         )
+
+    @router.callback_query(
+        SubscriptionForm.selecting_ticket_count, F.data == "subscribe:organization"
+    )
+    async def create_organization_subscription(callback: CallbackQuery, state: FSMContext) -> None:
+        assert isinstance(callback.message, Message)
+        live = booking_mode is RuntimeBookingMode.LIVE
+        await state.update_data(ticket_count=70, individual_orders=True)
+        await state.set_state(SubscriptionForm.confirming_live)
+        await callback.message.answer(
+            "Подписка для организации: до 70 билетов на каждый новый сеанс. "
+            "Один билет — один заказ — отдельное сообщение со ссылкой на оплату. "
+            "Любые свободные места, без ограничения цены и общей суммы. "
+            "Если мест меньше, оформлю доступные и продолжу поиск до начала сеанса. "
+            "Ограничения продавца не обходятся разделением заказов.\n\n"
+            + (
+                "Через 20 минут возможно повторное оформление только того же места, "
+                "если оно свободно. Оплату выполняете вы; бот её не проверяет. "
+                "Остановить все повторы можно паузой подписки, отдельное место — кнопкой у ссылки."
+                if live
+                else "Dry-run: только подбор, без реальных заказов."
+            ),
+            reply_markup=InlineKeyboardMarkup(
+                inline_keyboard=[
+                    [
+                        InlineKeyboardButton(
+                            text="Подтверждаю 70 отдельных заказов"
+                            if live
+                            else "Создать dry-run на 70 билетов",
+                            callback_data="subscribe:confirm",
+                        )
+                    ],
+                    [InlineKeyboardButton(text="Отмена", callback_data="subscribe:cancel")],
+                ]
+            ),
+        )
+        await callback.answer()
 
     @router.callback_query(
         SubscriptionForm.selecting_ticket_count, F.data.startswith("subscribe:count:")
@@ -596,19 +649,32 @@ def build_subscription_router(
         ticket_count = data.get("ticket_count")
         ticket_minor = data.get("ticket_limit_kopecks")
         order_minor = data.get("order_limit_kopecks")
-        if (
-            not isinstance(ticket_count, int)
-            or ticket_count not in range(1, 7)
-            or not isinstance(ticket_minor, int)
-            or ticket_minor <= 0
-            or not isinstance(order_minor, int)
-            or order_minor < ticket_minor
-            or ticket_minor > 100_000_000_000
-            or order_minor > 100_000_000_000
+        individual_orders = data.get("individual_orders") is True
+        if (individual_orders and ticket_count != 70) or (
+            not individual_orders
+            and (
+                not isinstance(ticket_count, int)
+                or ticket_count not in range(1, 7)
+                or not isinstance(ticket_minor, int)
+                or ticket_minor <= 0
+                or not isinstance(order_minor, int)
+                or order_minor < ticket_minor
+                or ticket_minor > 100_000_000_000
+                or order_minor > 100_000_000_000
+            )
         ):
             await state.clear()
             await callback.answer("Начните создание заново", show_alert=True)
             return
+        assert isinstance(ticket_count, int)
+        if not individual_orders:
+            assert isinstance(ticket_minor, int) and isinstance(order_minor, int)
+        ticket_limit = (
+            Money(ticket_minor) if isinstance(ticket_minor, int) and not individual_orders else None
+        )
+        order_limit = (
+            Money(order_minor) if isinstance(order_minor, int) and not individual_orders else None
+        )
         async with session_factory() as session, session.begin():
             repository = SubscriptionRepository(session)
             if live and await repository.buyer_profile(str(callback.from_user.id)) is None:
@@ -619,8 +685,9 @@ def build_subscription_router(
                 ticket_count,
                 str(callback.from_user.id),
                 live=live,
-                max_ticket_price=Money(ticket_minor),
-                max_order_total=Money(order_minor),
+                max_ticket_price=ticket_limit,
+                max_order_total=order_limit,
+                individual_orders=individual_orders,
             )
             await repository.add(value, telegram_chat_id=str(callback.message.chat.id))
         await state.clear()

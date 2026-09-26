@@ -92,6 +92,7 @@ class CheckoutRequest:
     reserved_total: Money
     expected_hold_ttl_seconds: int
     buyer: CheckoutBuyer
+    price_unlimited: bool = False
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "intent_id", _required(self.intent_id, name="intent_id"))
