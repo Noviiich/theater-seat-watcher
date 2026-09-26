@@ -34,6 +34,8 @@ class ResilientPollingWorker:
         event_log: RuntimeEventLog,
         now: Callable[[], datetime] | None = None,
         jitter: Callable[[float, float], float] | None = None,
+        wake_event: asyncio.Event | None = None,
+        monotonic: Callable[[], float] | None = None,
     ) -> None:
         if not name.strip():
             raise ValueError("worker name must not be empty")
@@ -44,6 +46,8 @@ class ResilientPollingWorker:
         self._event_log = event_log
         self._now = now or (lambda: datetime.now(UTC))
         self._jitter = jitter or random.uniform
+        self._wake_event = wake_event
+        self._monotonic = monotonic or time.monotonic
         self._failures = 0
         self._last_success: datetime | None = None
 
@@ -51,7 +55,7 @@ class ResilientPollingWorker:
         """Execute one iteration and return its deterministic next delay."""
         started = self._now()
         _validate_time(started)
-        monotonic_started = time.monotonic()
+        monotonic_started = self._monotonic()
         await self._record(
             WorkerRun(
                 self.name,
@@ -75,7 +79,7 @@ class ResilientPollingWorker:
                     self._failures,
                     last_succeeded_at=self._last_success,
                     last_error_code="cancelled",
-                    duration_ms=_duration_ms(monotonic_started),
+                    duration_ms=_duration_ms(monotonic_started, self._monotonic),
                 )
             )
             raise
@@ -95,7 +99,7 @@ class ResilientPollingWorker:
                     next_run_at=next_run,
                     last_succeeded_at=self._last_success,
                     last_error_code=error_code,
-                    duration_ms=_duration_ms(monotonic_started),
+                    duration_ms=_duration_ms(monotonic_started, self._monotonic),
                 )
             )
             self._event_log.emit(
@@ -110,10 +114,15 @@ class ResilientPollingWorker:
         finished = self._now()
         self._failures = 0
         self._last_success = finished
-        delay = max(
+        interval = max(
             0.0,
             self._schedule.interval_seconds
             + self._jitter(-self._schedule.jitter_seconds, self._schedule.jitter_seconds),
+        )
+        delay = (
+            max(0.0, interval - (self._monotonic() - monotonic_started))
+            if self._schedule.start_to_start
+            else interval
         )
         next_run = finished + timedelta(seconds=delay)
         await self._record(
@@ -125,24 +134,40 @@ class ResilientPollingWorker:
                 0,
                 next_run_at=next_run,
                 last_succeeded_at=finished,
-                duration_ms=_duration_ms(monotonic_started),
+                duration_ms=_duration_ms(monotonic_started, self._monotonic),
             )
         )
         self._event_log.emit(
             "worker_succeeded",
             worker=self.name,
-            duration_ms=_duration_ms(monotonic_started),
+            duration_ms=_duration_ms(monotonic_started, self._monotonic),
             next_run_seconds=round(delay, 3),
         )
         return delay
 
     async def run(self, stop: asyncio.Event) -> None:
         while not stop.is_set():
+            if self._wake_event is not None:
+                self._wake_event.clear()
             delay = await self.execute_once()
-            try:
-                await asyncio.wait_for(stop.wait(), timeout=delay)
-            except TimeoutError:
-                continue
+            if self._wake_event is None:
+                try:
+                    await asyncio.wait_for(stop.wait(), timeout=delay)
+                except TimeoutError:
+                    continue
+            else:
+                stop_wait = asyncio.create_task(stop.wait())
+                wake_wait = asyncio.create_task(self._wake_event.wait())
+                try:
+                    await asyncio.wait(
+                        (stop_wait, wake_wait),
+                        timeout=delay,
+                        return_when=asyncio.FIRST_COMPLETED,
+                    )
+                finally:
+                    for task in (stop_wait, wake_wait):
+                        task.cancel()
+                    await asyncio.gather(stop_wait, wake_wait, return_exceptions=True)
 
     def _failure_delay(self, exc: Exception) -> float:
         retry_after = getattr(exc, "retry_after_seconds", None)
@@ -276,8 +301,8 @@ async def run_until_signalled(supervisor: RuntimeSupervisor) -> None:
             loop.remove_signal_handler(signum)
 
 
-def _duration_ms(started: float) -> int:
-    return max(0, int((time.monotonic() - started) * 1000))
+def _duration_ms(started: float, monotonic: Callable[[], float]) -> int:
+    return max(0, int((monotonic() - started) * 1000))
 
 
 def _error_code(exc: Exception) -> str:

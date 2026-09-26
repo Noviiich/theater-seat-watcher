@@ -11,7 +11,7 @@ from theater_tickets.adapters.quicktickets.provider import (
     QuickTicketsProvider,
     parse_session_identity,
 )
-from theater_tickets.domain.models import SeatAvailability
+from theater_tickets.domain.models import SeatAvailability, Session
 
 
 class FakeClient:
@@ -104,6 +104,53 @@ def test_provider_builds_complete_catalogue_and_refreshes_public_reads() -> None
         assert len(inventory) == 1
         assert inventory[0].availability is SeatAvailability.FREE
         assert (await provider.fetch_sale_capabilities(session.key)).sell_max == 4
+
+    asyncio.run(scenario())
+
+
+def test_provider_reuses_known_sessions_until_full_refresh() -> None:
+    class CountingClient(FakeClient):
+        def __init__(self) -> None:
+            self.session_pages = 0
+            self.session_details = 0
+
+        async def get_session_page(self, session_id: str) -> tuple[str, QuickTicketsContext]:
+            self.session_pages += 1
+            return await super().get_session_page(session_id)
+
+        async def get_json(
+            self,
+            path: str,
+            *,
+            context: QuickTicketsContext,
+            elem_id: str,
+            elem_type: str = "session",
+        ) -> dict[str, Any]:
+            if path == "anysession/anysession":
+                self.session_details += 1
+            return await super().get_json(
+                path, context=context, elem_id=elem_id, elem_type=elem_type
+            )
+
+    async def scenario() -> None:
+        known: dict[str, Session] = {}
+
+        async def load_known(_: str) -> dict[str, Session]:
+            return known
+
+        client = CountingClient()
+        provider = QuickTicketsProvider(client, known_sessions=load_known)  # type: ignore[arg-type]
+        first = await provider.fetch_catalogue("theatre")
+        known = {item.key.session_id: item for item in first.sessions}
+        second = await provider.fetch_catalogue("theatre")
+        assert second.fingerprint == first.fingerprint
+        assert (client.session_pages, client.session_details) == (1, 1)
+
+        full = QuickTicketsProvider(  # type: ignore[arg-type]
+            client, known_sessions=load_known, full_refresh_seconds=0
+        )
+        await full.fetch_catalogue("theatre")
+        assert (client.session_pages, client.session_details) == (2, 2)
 
     asyncio.run(scenario())
 

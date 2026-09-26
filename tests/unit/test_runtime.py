@@ -53,6 +53,30 @@ class RateLimited(RuntimeError):
         self.retry_after_seconds = retry_after_seconds
 
 
+def test_catalogue_schedule_measures_interval_between_starts() -> None:
+    async def scenario() -> None:
+        elapsed = 0.0
+        durations = iter((0.5, 3.0))
+
+        async def callback() -> None:
+            nonlocal elapsed
+            elapsed += next(durations)
+
+        worker = ResilientPollingWorker(
+            name="catalogue",
+            callback=callback,
+            schedule=WorkerSchedule(2.5, start_to_start=True),
+            state_store=MemoryStateStore(),
+            event_log=MemoryLog(),
+            now=lambda: datetime(2026, 9, 21, tzinfo=UTC),
+            monotonic=lambda: elapsed,
+        )
+        assert await worker.execute_once() == 2.0
+        assert await worker.execute_once() == 0.0
+
+    asyncio.run(scenario())
+
+
 def test_worker_uses_exponential_backoff_retry_after_and_resets_after_success() -> None:
     async def scenario() -> None:
         outcomes: list[Exception | None] = [RuntimeError("private detail"), RuntimeError(), None]

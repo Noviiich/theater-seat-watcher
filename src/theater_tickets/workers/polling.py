@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from time import monotonic
 from typing import Protocol
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from theater_tickets.adapters.persistence.unit_of_work import SqlAlchemyUnitOfWork
 from theater_tickets.application.discovery import DiscoveryService
+from theater_tickets.application.runtime import RuntimeEventLog
 from theater_tickets.domain.models import Session, Subscription
 
 
@@ -44,10 +46,12 @@ class CataloguePollingWorker:
         session_factory: async_sessionmaker[AsyncSession],
         source: CatalogueSource,
         subscriptions: ActiveSubscriptionSource,
+        event_log: RuntimeEventLog | None = None,
     ) -> None:
         self._session_factory = session_factory
         self._source = source
         self._subscriptions = subscriptions
+        self._event_log = event_log
 
     async def run_once(self, *, now: datetime) -> CataloguePollOutcome:
         if now.tzinfo is None or now.utcoffset() is None:
@@ -59,6 +63,8 @@ class CataloguePollingWorker:
         candidate_count = 0
         for theatre_alias, rules in grouped.items():
             snapshot = await self._source.fetch_catalogue(theatre_alias)
+            persisted_started = monotonic()
+            theatre_candidates = 0
             for subscription in rules:
                 async with SqlAlchemyUnitOfWork(self._session_factory) as uow:
                     assert uow.session is not None
@@ -71,4 +77,12 @@ class CataloguePollingWorker:
                         complete=snapshot.complete,
                     )
                 candidate_count += len(outcome.candidate_ids)
+                theatre_candidates += len(outcome.candidate_ids)
+            if self._event_log is not None:
+                self._event_log.emit(
+                    "catalogue_discovery",
+                    persistence_ms=round((monotonic() - persisted_started) * 1000),
+                    subscriptions=len(rules),
+                    candidates=theatre_candidates,
+                )
         return CataloguePollOutcome(len(grouped), len(subscriptions), candidate_count)

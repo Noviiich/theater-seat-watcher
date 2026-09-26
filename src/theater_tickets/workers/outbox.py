@@ -4,12 +4,14 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import datetime, timedelta
+from time import monotonic
 
 from theater_tickets.application.outbox import (
     NotificationRateLimited,
     NotificationTransport,
     OutboxRepository,
 )
+from theater_tickets.application.runtime import RuntimeEventLog
 from theater_tickets.application.status import remaining_ttl_line
 
 
@@ -20,12 +22,14 @@ class OutboxWorker:
         repository: OutboxRepository,
         transport: NotificationTransport,
         batch_size: int = 20,
+        event_log: RuntimeEventLog | None = None,
     ) -> None:
         if batch_size <= 0:
             raise ValueError("batch_size must be positive")
         self._repository = repository
         self._transport = transport
         self._batch_size = batch_size
+        self._event_log = event_log
 
     async def recover_startup(self, *, now: datetime) -> int:
         self._validate_time(now)
@@ -60,7 +64,14 @@ class OutboxWorker:
                             f"{remaining_ttl_line(expires_at=item.expires_at, now=now)}"
                         ),
                     )
+                send_started = monotonic()
                 message_id = await self._transport.send(delivered)
+                if self._event_log is not None:
+                    self._event_log.emit(
+                        "notification_sent",
+                        outbox_id=item.outbox_id,
+                        duration_ms=round((monotonic() - send_started) * 1000),
+                    )
             except NotificationRateLimited as exc:
                 await self._repository.schedule_retry(
                     outbox_id=item.outbox_id,

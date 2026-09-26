@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
+import logging
 from datetime import UTC, datetime
+from math import ceil
 
 from aiogram import Bot
 
+from theater_tickets.adapters.logging import SafeJsonLogger
 from theater_tickets.adapters.persistence.booking import (
     SqlAlchemyBatchSummaryScheduler,
     SqlAlchemyBookingRepository,
@@ -24,6 +28,7 @@ from theater_tickets.adapters.persistence.reconciliation import (
 from theater_tickets.adapters.persistence.renewals import SqlAlchemyRenewalRepository
 from theater_tickets.adapters.persistence.runtime import (
     SqlAlchemyActiveSubscriptionSource,
+    SqlAlchemyKnownSessionSource,
     SqlAlchemyRuntimeStateStore,
 )
 from theater_tickets.adapters.quicktickets.browser import PlaywrightQuickTicketsBrowserDriver
@@ -85,7 +90,14 @@ async def run_production(settings: Settings) -> None:
         return datetime.now(UTC)
 
     try:
-        provider = QuickTicketsProvider(client)
+        event_log = SafeJsonLogger(logging.getLogger("theater_tickets.latency"))
+        booking_wake_event = asyncio.Event()
+        outbox_wake_event = asyncio.Event()
+        provider = QuickTicketsProvider(
+            client,
+            known_sessions=SqlAlchemyKnownSessionSource(session_factory).list_known,
+            event_log=event_log,
+        )
         profiles = DirectorySeatProfileSource(settings.hall_profiles_path)
         booking_repository = SqlAlchemyBookingRepository(session_factory)
         evaluator = CandidateEvaluator(provider=provider, profiles=profiles)
@@ -120,6 +132,7 @@ async def run_production(settings: Settings) -> None:
                 order_writer=SqlAlchemyOrderOutboxWriter(session_factory),
                 failures=booking_repository,
                 now=now,
+                event_log=event_log,
             ),
         )
         dry_run_worker = DryRunWorker(
@@ -130,6 +143,7 @@ async def run_production(settings: Settings) -> None:
         outbox_worker = OutboxWorker(
             repository=SqlAlchemyOutboxRepository(session_factory),
             transport=AiogramNotificationTransport(bot),
+            event_log=event_log,
         )
         recovery_loader = SqlAlchemyRecoveryRequestLoader(session_factory)
         recovery = CheckoutRecoveryService(
@@ -154,19 +168,26 @@ async def run_production(settings: Settings) -> None:
             session_factory=session_factory,
             source=provider,
             subscriptions=SqlAlchemyActiveSubscriptionSource(session_factory),
+            event_log=event_log,
         )
         dispatcher = build_dispatcher(
             administrator_user_id=settings.administrator_telegram_user_id,
             session_factory=session_factory,
-            catalogue_stale_after_seconds=settings.poll_interval_seconds * 3,
+            catalogue_stale_after_seconds=max(30, ceil(settings.poll_interval_seconds * 3)),
             booking_mode=settings.booking_mode,
         )
 
         async def poll_catalogue() -> object:
-            return await catalogue.run_once(now=now())
+            outcome = await catalogue.run_once(now=now())
+            if outcome.candidates:
+                booking_wake_event.set()
+            return outcome
 
         async def process_booking() -> object:
-            return await workflow.run_booking_due(now=now())
+            outcome = await workflow.run_booking_due(now=now())
+            if outcome.live_processed or outcome.dry_run_processed:
+                outbox_wake_event.set()
+            return outcome
 
         async def deliver_outbox() -> object:
             return await workflow.run_outbox_due(now=now())
@@ -193,6 +214,8 @@ async def run_production(settings: Settings) -> None:
                 recoveries=(recover,),
             ),
             state_store=SqlAlchemyRuntimeStateStore(session_factory),
+            booking_wake_event=booking_wake_event,
+            outbox_wake_event=outbox_wake_event,
         )
         await run_until_signalled(supervisor)
     finally:

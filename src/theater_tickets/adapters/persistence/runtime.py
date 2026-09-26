@@ -26,7 +26,7 @@ from theater_tickets.adapters.persistence.models import (
 from theater_tickets.adapters.persistence.repositories import SubscriptionRepository
 from theater_tickets.application.runtime import WorkerRun
 from theater_tickets.application.status import CandidateStatus, RuntimeStatus
-from theater_tickets.domain.models import Subscription
+from theater_tickets.domain.models import Session, SessionKey, Subscription
 
 LOCK_NAME = "theater_tickets"
 
@@ -147,6 +147,37 @@ class SqlAlchemyActiveSubscriptionSource:
     async def list_enabled(self) -> tuple[Subscription, ...]:
         async with self._session_factory() as database:
             return await SubscriptionRepository(database).list_enabled()
+
+
+class SqlAlchemyKnownSessionSource:
+    """Load persisted session details for the catalogue fast path."""
+
+    def __init__(self, session_factory: async_sessionmaker[AsyncSession]) -> None:
+        self._session_factory = session_factory
+
+    async def list_known(self, theatre_alias: str) -> dict[str, Session]:
+        async with self._session_factory() as database:
+            rows = (
+                await database.scalars(
+                    select(SessionModel).where(
+                        SessionModel.provider == "quicktickets",
+                        SessionModel.theatre_alias == theatre_alias,
+                    )
+                )
+            ).all()
+        known: dict[str, Session] = {}
+        for row in rows:
+            starts_at = row.starts_at
+            if starts_at.tzinfo is None:
+                starts_at = starts_at.replace(tzinfo=UTC)
+            known[row.provider_session_id] = Session(
+                SessionKey(row.provider, row.theatre_alias, row.provider_session_id),
+                row.event_id,
+                row.hall_id,
+                row.title,
+                starts_at,
+            )
+        return known
 
 
 class SqlAlchemyStatusReader:

@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
+from math import isfinite
 from os import environ
 from pathlib import Path
 
@@ -29,6 +30,18 @@ def _positive_int(value: str | None, *, name: str, default: int) -> int:
     if parsed <= 0:
         message = f"{name} must be a positive integer"
         raise ValueError(message)
+    return parsed
+
+
+def _positive_float(value: str | None, *, name: str, default: float) -> float:
+    if value is None or value == "":
+        return default
+    try:
+        parsed = float(value)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be a positive finite number") from exc
+    if not isfinite(parsed) or parsed <= 0:
+        raise ValueError(f"{name} must be a positive finite number")
     return parsed
 
 
@@ -74,7 +87,7 @@ class Settings:
     """Settings displayed by the shell without exposing secret values."""
 
     booking_mode: BookingMode
-    poll_interval_seconds: int
+    poll_interval_seconds: float
     poll_jitter_seconds: int
     worker_interval_seconds: int
     runtime_max_backoff_seconds: int
@@ -108,15 +121,15 @@ class Settings:
         booking_mode = _booking_mode(source.get("BOOKING_MODE"))
         return cls(
             booking_mode=booking_mode,
-            poll_interval_seconds=_positive_int(
+            poll_interval_seconds=_positive_float(
                 source.get("POLL_INTERVAL_SECONDS"),
                 name="POLL_INTERVAL_SECONDS",
-                default=60,
+                default=2.5,
             ),
             poll_jitter_seconds=_non_negative_int(
                 source.get("POLL_JITTER_SECONDS"),
                 name="POLL_JITTER_SECONDS",
-                default=10,
+                default=0,
             ),
             worker_interval_seconds=_positive_int(
                 source.get("WORKER_INTERVAL_SECONDS"),

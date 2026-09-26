@@ -10,8 +10,8 @@ def test_application_status_has_no_network_or_ticket_operations() -> None:
     assert app.status_lines() == (
         "theater_tickets: initialized",
         "booking_mode=dry_run",
-        "poll_interval_seconds=60",
-        "poll_jitter_seconds=10",
+        "poll_interval_seconds=2.5",
+        "poll_jitter_seconds=0",
         "worker_interval_seconds=5",
         "runtime_max_backoff_seconds=300",
         "runtime_lock_lease_seconds=30",

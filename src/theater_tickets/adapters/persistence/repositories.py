@@ -64,6 +64,7 @@ class CatalogueRepository:
         )
         existing = await self._session.scalar(statement)
         if existing is not None:
+            existing.fetched_at = fetched_at
             return existing
         model = CatalogueSnapshotModel(
             id=snapshot_id,

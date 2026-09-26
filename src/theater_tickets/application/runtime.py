@@ -18,6 +18,7 @@ class WorkerSchedule:
     jitter_seconds: float = 0.0
     initial_backoff_seconds: float = 1.0
     max_backoff_seconds: float = 300.0
+    start_to_start: bool = False
 
     def __post_init__(self) -> None:
         if self.interval_seconds <= 0:

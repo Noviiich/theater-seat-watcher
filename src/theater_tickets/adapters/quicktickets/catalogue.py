@@ -10,7 +10,7 @@ from html.parser import HTMLParser
 from typing import Any
 from urllib.parse import urlparse
 
-SESSION_HREF = re.compile(r"/(?:[^/]+/)?s(?P<id>[A-Za-z0-9_-]+)(?:/|$)")
+SESSION_HREF = re.compile(r"/(?:[^/]+/)?s(?P<id>[0-9]+)(?:/|$)")
 EVENT_HREF = re.compile(r"/(?:[^/]+/)?e(?P<id>[A-Za-z0-9_-]+)(?:/|$)")
 
 
@@ -149,8 +149,20 @@ def parse_session_page(html: str) -> SessionPageDetails:
             continue
         values = payload if isinstance(payload, list) else [payload]
         for item in values:
-            if isinstance(item, dict) and isinstance(item.get("startDate"), str):
-                value = datetime.fromisoformat(item["startDate"].replace("Z", "+00:00"))
+            if not isinstance(item, dict):
+                continue
+            candidates = [item]
+            graph = item.get("@graph")
+            if isinstance(graph, list):
+                candidates.extend(
+                    node
+                    for node in graph
+                    if isinstance(node, dict) and node.get("@type") == "Event"
+                )
+            for candidate in candidates:
+                if not isinstance(candidate.get("startDate"), str):
+                    continue
+                value = datetime.fromisoformat(candidate["startDate"].replace("Z", "+00:00"))
                 if value.tzinfo is None or value.utcoffset() is None:
                     raise ValueError("JSON-LD startDate must have timezone")
                 starts.append(value)

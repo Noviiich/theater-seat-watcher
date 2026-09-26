@@ -6,6 +6,7 @@ import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
+from time import monotonic
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -38,6 +39,7 @@ from theater_tickets.application.renewals import (
     RenewalRepository,
     RenewalTask,
 )
+from theater_tickets.application.runtime import RuntimeEventLog
 from theater_tickets.domain.models import Session, Subscription
 from theater_tickets.workers.outbox import OutboxWorker
 from theater_tickets.workers.renewals import RenewalWorker
@@ -67,6 +69,7 @@ class LiveCandidateProcessor:
         failures: CheckoutFailureRepository,
         now: Callable[[], datetime],
         locks: BuyerCheckoutLocks | None = None,
+        event_log: RuntimeEventLog | None = None,
     ) -> None:
         self._session_factory = session_factory
         self._contexts = contexts
@@ -76,6 +79,7 @@ class LiveCandidateProcessor:
         self._failures = failures
         self._now = now
         self._locks = locks or BuyerCheckoutLocks()
+        self._event_log = event_log
 
     async def process(self, task: RenewalTask) -> RenewalProcessResult:
         context = await self._contexts.load(task.candidate_id)
@@ -92,12 +96,28 @@ class LiveCandidateProcessor:
         now = self._now()
         if now.tzinfo is None or now.utcoffset() is None:
             raise ValueError("booking processor clock must return an aware timestamp")
+        evaluation_started = monotonic()
         try:
             evaluation = await self._evaluator.evaluate(context, now=now)
         except (LookupError, ValueError) as exc:
+            if self._event_log is not None:
+                self._event_log.emit(
+                    "seat_evaluation",
+                    candidate_id=context.candidate_id,
+                    duration_ms=round((monotonic() - evaluation_started) * 1000),
+                    state="error",
+                    error_code=type(exc).__name__.casefold(),
+                )
             return RenewalProcessResult(
                 RenewalProcessState.NEEDS_ATTENTION,
                 stop_reason=type(exc).__name__.casefold(),
+            )
+        if self._event_log is not None:
+            self._event_log.emit(
+                "seat_evaluation",
+                candidate_id=context.candidate_id,
+                duration_ms=round((monotonic() - evaluation_started) * 1000),
+                state=evaluation.state.value,
             )
         if evaluation.state is EvaluationState.PAUSED:
             return RenewalProcessResult(RenewalProcessState.PAUSED)
@@ -169,14 +189,31 @@ class LiveCandidateProcessor:
             ),
             buyer=buyer,
         )
+        checkout_started = monotonic()
         result = await self._checkout.submit(request)
+        if self._event_log is not None:
+            self._event_log.emit(
+                "checkout_submit",
+                candidate_id=context.candidate_id,
+                intent_id=request.intent_id,
+                duration_ms=round((monotonic() - checkout_started) * 1000),
+                state=result.state.value,
+            )
         if result.state is CheckoutState.CONFIRMED:
             assert result.order is not None
+            record_started = monotonic()
             await self._order_writer.record_confirmed_order(
                 intent_id=request.intent_id,
                 order=result.order,
                 recorded_at=now,
             )
+            if self._event_log is not None:
+                self._event_log.emit(
+                    "order_recorded",
+                    candidate_id=context.candidate_id,
+                    intent_id=request.intent_id,
+                    duration_ms=round((monotonic() - record_started) * 1000),
+                )
             return RenewalProcessResult(
                 RenewalProcessState.HELD,
                 cycle_no=planned.cycle_no,

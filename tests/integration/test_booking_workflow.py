@@ -22,6 +22,7 @@ from theater_tickets.adapters.persistence.models import (
     BuyerModel,
     CandidateModel,
     CheckoutIntentModel,
+    DiscoveryBatchModel,
     DryRunReportModel,
     OrderModel,
     OutboxMessageModel,
@@ -307,6 +308,79 @@ def test_telegram_limits_apply_separately_to_every_new_session(tmp_path: Path) -
                 )
                 == 3
             )
+        await engine.dispose()
+
+    asyncio.run(scenario())
+
+
+def test_ten_new_sessions_in_one_snapshot_each_get_one_order(tmp_path: Path) -> None:
+    async def scenario() -> None:
+        now = datetime(2026, 9, 20, 9, tzinfo=UTC)
+        factory, engine = await _database(tmp_path / "ten-sessions.sqlite")
+        subscription = replace(
+            _new_button_subscription(
+                2,
+                "10",
+                live=True,
+                max_ticket_price=Money.from_rubles("5000"),
+                max_order_total=Money.from_rubles("15000"),
+            ),
+            subscription_id="subscription",
+            theatre_alias="theatre",
+            seat_profile_id="profile",
+        )
+        await _persist_subscription(factory, subscription)
+        provider = FakeProvider()
+        baseline = _session("base", now + timedelta(days=4))
+        new_sessions = tuple(
+            _session(f"new-{index}", now + timedelta(days=5, hours=index)) for index in range(10)
+        )
+        _configure(provider, (baseline, *new_sessions), _seats())
+        clock = FakeClock(now)
+        checkout = FakeCheckout(clock)
+        telegram = FakeTelegram()
+        workflow = _workflow(factory, provider, checkout, telegram, clock)
+
+        await workflow.process_snapshot(
+            subscription=subscription,
+            sessions=(baseline,),
+            fetched_at=now,
+            fingerprint="baseline",
+            complete=True,
+        )
+        discovered = await workflow.process_snapshot(
+            subscription=subscription,
+            sessions=(baseline, *new_sessions),
+            fetched_at=now + timedelta(minutes=1),
+            fingerprint="ten-new-sessions",
+            complete=True,
+        )
+
+        expected_ids = {session.key.session_id for session in new_sessions}
+        assert len(discovered.discovered_candidates) == 10
+        assert discovered.live_processed == 10
+        assert {call.session_key.session_id for call in checkout.calls} == expected_ids
+        assert len(checkout.calls) == 10
+        assert all(len(call.seat_ids) == 2 for call in checkout.calls)
+        assert len([item for item in telegram.sent if item.payment_url is not None]) == 10
+        async with factory() as database:
+            candidates = (await database.scalars(select(CandidateModel))).all()
+            assert len(candidates) == 10
+            assert len({candidate.discovery_batch_id for candidate in candidates}) == 1
+            assert await database.scalar(select(func.count()).select_from(DiscoveryBatchModel)) == 1
+            assert await database.scalar(select(func.count()).select_from(OrderModel)) == 10
+
+        repeated = await workflow.process_snapshot(
+            subscription=subscription,
+            sessions=(baseline, *new_sessions),
+            fetched_at=now + timedelta(minutes=2),
+            fingerprint="ten-new-sessions",
+            complete=True,
+        )
+        assert repeated.discovered_candidates == ()
+        assert repeated.live_processed == 0
+        assert len(checkout.calls) == 10
+        assert len([item for item in telegram.sent if item.payment_url is not None]) == 10
         await engine.dispose()
 
     asyncio.run(scenario())

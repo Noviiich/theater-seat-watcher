@@ -9,8 +9,8 @@ def test_settings_default_to_dry_run_and_twenty_minute_hold_intervals() -> None:
     settings = Settings.from_environ({})
 
     assert settings.booking_mode is BookingMode.DRY_RUN
-    assert settings.poll_interval_seconds == 60
-    assert settings.poll_jitter_seconds == 10
+    assert settings.poll_interval_seconds == 2.5
+    assert settings.poll_jitter_seconds == 0
     assert settings.worker_interval_seconds == 5
     assert settings.runtime_max_backoff_seconds == 300
     assert settings.runtime_lock_lease_seconds == 30

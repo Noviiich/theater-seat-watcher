@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -62,6 +63,8 @@ def create_runtime_supervisor(
     callbacks: RuntimeCallbacks,
     state_store: RuntimeStateStore,
     logger: logging.Logger | None = None,
+    booking_wake_event: asyncio.Event | None = None,
+    outbox_wake_event: asyncio.Event | None = None,
 ) -> RuntimeSupervisor:
     """Compose isolated polling tasks around concrete adapters supplied by deployment."""
     event_log = SafeJsonLogger(logger or logging.getLogger("theater_tickets.runtime"))
@@ -72,6 +75,7 @@ def create_runtime_supervisor(
             schedule=WorkerSchedule(
                 settings.poll_interval_seconds,
                 jitter_seconds=settings.poll_jitter_seconds,
+                start_to_start=True,
                 max_backoff_seconds=settings.runtime_max_backoff_seconds,
             ),
             state_store=state_store,
@@ -86,6 +90,7 @@ def create_runtime_supervisor(
             ),
             state_store=state_store,
             event_log=event_log,
+            wake_event=booking_wake_event,
         ),
         ResilientPollingWorker(
             name="outbox",
@@ -96,6 +101,7 @@ def create_runtime_supervisor(
             ),
             state_store=state_store,
             event_log=event_log,
+            wake_event=outbox_wake_event,
         ),
         ResilientPollingWorker(
             name="telegram",
